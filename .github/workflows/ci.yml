@@ -23,6 +23,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +35,44 @@ jobs:
 
       - name: Build MSI
         run: powershell -NoProfile -ExecutionPolicy Bypass -File installer/build-msi.ps1
+
+      - name: Detect SignPath configuration
+        id: signpath_config
+        shell: pwsh
+        run: |
+          $enabled = -not [string]::IsNullOrWhiteSpace('${{ secrets.SIGNPATH_API_TOKEN }}')
+          Write-Host "SignPath signing enabled: $enabled"
+          "enabled=$enabled" >> $env:GITHUB_OUTPUT
+
+      - name: Upload unsigned binaries for SignPath
+        if: steps.signpath_config.outputs.enabled == 'true'
+        id: upload_unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: duskplug-unsigned
+          path: |
+            DuskPlug.exe
+            DuskPlug.msi
+          retention-days: 1
+
+      - name: Submit signing request to SignPath
+        if: steps.signpath_config.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload_unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Apply signed binaries
+        if: steps.signpath_config.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          Copy-Item -Force signed/DuskPlug.exe DuskPlug.exe
+          Copy-Item -Force signed/DuskPlug.msi DuskPlug.msi
 
       - name: Package release ZIP
         shell: pwsh

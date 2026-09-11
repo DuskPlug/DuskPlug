@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Tuya setup help
+    url: https://github.com/MrChriZ/DuskPlug/blob/master/docs/GETTING-STARTED.md
+    about: Step-by-step guide for the Tuya developer portal and DuskPlug Settings
+  - name: Discussions
+    url: https://github.com/MrChriZ/DuskPlug/discussions
+    about: Ask questions or share ideas

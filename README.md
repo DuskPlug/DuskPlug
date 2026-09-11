@@ -1,6 +1,26 @@
 # DuskPlug
 
+[![CI](https://github.com/MrChriZ/DuskPlug/actions/workflows/ci.yml/badge.svg)](https://github.com/MrChriZ/DuskPlug/actions/workflows/ci.yml)
+
 Control a Tuya smart plug from the Windows system tray — manual on/off, **Smart Mode** (on at dusk, off at dawn), and **Schedule Mode** (fixed daily times).
+
+Free, open source, and MIT-licensed. You only need your own free Tuya cloud project — no DuskPlug account.
+
+## Screenshots
+
+| Tray icons (manual, smart, off) | Context menu |
+|---------------------------------|--------------|
+| ![Tray modes](docs/screenshots/tray-modes.png) | ![Tray menu](docs/screenshots/tray-menu.png) |
+
+![Settings dialog](docs/screenshots/settings-dialog.png)
+
+## Why DuskPlug?
+
+- **Free and open source** — MIT license, no subscription
+- **Your Tuya project only** — credentials stay in `%APPDATA%\SMART\config.json` on your PC
+- **Smart Mode** — sunset on, sunrise off from your location
+- **Schedule Mode** — fixed daily on/off times
+- **Easy install** — MSI installer or portable ZIP
 
 ## Download
 
@@ -8,9 +28,13 @@ Control a Tuya smart plug from the Windows system tray — manual on/off, **Smar
 
 **Portable ZIP:** download **DuskPlug-Windows.zip**, unzip it anywhere, and double-click **`Start-DuskPlug.cmd`**.
 
+Code signing via [SignPath Foundation](https://signpath.org) (pending approval). Windows builds will be Authenticode-signed once approved.
+
 If you cloned this repo instead, run **`Build-DuskPlug.cmd`**. **`Build-Msi.cmd`** builds the installer (needs the .NET SDK).
 
 Full walkthrough (Tuya portal screens, linking the phone app, and every Settings field): **[Getting started](docs/GETTING-STARTED.md)**.
+
+Privacy: [Privacy Policy](docs/PRIVACY.md)
 
 ## Set up a Tuya cloud project (one-time)
 
@@ -103,15 +127,18 @@ cpp\test.cmd
 ### Project layout
 
 | Path | Purpose |
-|------|----------------|
+|------|---------|
 | `cpp/src/` | DuskPlug C++ source |
 | `lib/TuyaApi.ps1` | Tuya Cloud API helpers |
 | `Setup.ps1` / `Setup.cmd` | Interactive setup wizard |
 | `Plug-*.ps1` | Optional CLI helpers (same cloud API as the tray) |
 | `config.example.json` | Public template (placeholders only) |
 | `installer/` | WiX source for **DuskPlug.msi** |
+| `packaging/` | winget and Scoop manifest sources |
 
 Config is loaded from `%APPDATA%\SMART\config.json`. See [`cpp/README.md`](cpp/README.md) for Smart Mode details.
+
+Releases: [`docs/RELEASE.md`](docs/RELEASE.md)
 
 ## License
 
