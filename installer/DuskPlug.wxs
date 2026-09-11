@@ -3,7 +3,7 @@
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package
       Name="DuskPlug"
-      Manufacturer="MrChriZ"
+      Manufacturer="DuskPlug"
       Version="1.0.1"
       UpgradeCode="8F3C2A91-7B4E-4D16-A9E2-1C5B8F0D3A27"
       Compressed="yes">
@@ -14,8 +14,8 @@
 
     <Icon Id="DuskPlug.exe" SourceFile="..\assets\app.ico" />
     <Property Id="ARPPRODUCTICON" Value="DuskPlug.exe" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/MrChriZ/DuskPlug" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/MrChriZ/DuskPlug" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/DuskPlug/DuskPlug" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/DuskPlug/DuskPlug" />
 
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch DuskPlug now" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />

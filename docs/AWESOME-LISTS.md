@@ -9,7 +9,7 @@ Use these when opening pull requests to curated lists. Search GitHub for the cur
 **Entry to add:**
 
 ```markdown
-- [DuskPlug](https://github.com/MrChriZ/DuskPlug) - Windows tray app for Tuya smart plugs with dusk/dawn and schedule modes (MIT).
+- [DuskPlug](https://github.com/DuskPlug/DuskPlug) - Windows tray app for Tuya smart plugs with dusk/dawn and schedule modes (MIT).
 ```
 
 **PR body template:**
@@ -25,7 +25,7 @@ Use these when opening pull requests to curated lists. Search GitHub for the cur
 **Entry:**
 
 ```markdown
-- [DuskPlug](https://github.com/MrChriZ/DuskPlug) - Windows tray client for Tuya smart plugs; config and credentials stay local (`MIT`).
+- [DuskPlug](https://github.com/DuskPlug/DuskPlug) - Windows tray client for Tuya smart plugs; config and credentials stay local (`MIT`).
 ```
 
 ---
@@ -35,7 +35,7 @@ Use these when opening pull requests to curated lists. Search GitHub for the cur
 **Entry:**
 
 ```markdown
-- [DuskPlug](https://github.com/MrChriZ/DuskPlug) - Control a Tuya smart plug from the system tray with Smart Mode (dusk/dawn) and schedules.
+- [DuskPlug](https://github.com/DuskPlug/DuskPlug) - Control a Tuya smart plug from the system tray with Smart Mode (dusk/dawn) and schedules.
 ```
 
 ---
@@ -47,7 +47,7 @@ Search for an active `awesome-tuya` or similar list. If found:
 **Entry:**
 
 ```markdown
-- [DuskPlug](https://github.com/MrChriZ/DuskPlug) - Native Windows tray app using Smart Home OpenAPI; includes setup guide for linking Smart Life accounts.
+- [DuskPlug](https://github.com/DuskPlug/DuskPlug) - Native Windows tray app using Smart Home OpenAPI; includes setup guide for linking Smart Life accounts.
 ```
 
 ---

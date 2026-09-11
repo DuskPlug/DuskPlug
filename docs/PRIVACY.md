@@ -24,4 +24,4 @@ Plug control requests go directly to Tuya's API (for example `openapi.tuyaeu.com
 
 ## Contact
 
-Issues and questions: https://github.com/MrChriZ/DuskPlug/issues
+Issues and questions: https://github.com/DuskPlug/DuskPlug/issues

@@ -1,6 +1,6 @@
 # DuskPlug
 
-[![CI](https://github.com/MrChriZ/DuskPlug/actions/workflows/ci.yml/badge.svg)](https://github.com/MrChriZ/DuskPlug/actions/workflows/ci.yml)
+[![CI](https://github.com/DuskPlug/DuskPlug/actions/workflows/ci.yml/badge.svg)](https://github.com/DuskPlug/DuskPlug/actions/workflows/ci.yml)
 
 Control a Tuya smart plug from the Windows system tray — manual on/off, **Smart Mode** (on at dusk, off at dawn), and **Schedule Mode** (fixed daily times).
 
@@ -30,7 +30,7 @@ Free, open source, and MIT-licensed. You only need your own free Tuya cloud proj
 
 ## Download
 
-**Installer (recommended):** download **DuskPlug.msi** from [GitHub Releases](https://github.com/MrChriZ/DuskPlug/releases) and run it. That installs to Program Files, adds a Start menu shortcut, and starts DuskPlug when you log in. First run opens **Settings**.
+**Installer (recommended):** download **DuskPlug.msi** from [GitHub Releases](https://github.com/DuskPlug/DuskPlug/releases) and run it. That installs to Program Files, adds a Start menu shortcut, and starts DuskPlug when you log in. First run opens **Settings**.
 
 **Portable ZIP:** download **DuskPlug-Windows.zip**, unzip it anywhere, and double-click **`Start-DuskPlug.cmd`**.
 

@@ -42,11 +42,11 @@ I wrote a getting-started guide that matches the 2026 portal UI because I lost a
 - **Settings dialog** — no hand-editing JSON unless you want to
 - **MSI installer** — Program Files, Start menu, run at login
 
-Everything is MIT licensed: https://github.com/MrChriZ/DuskPlug
+Everything is MIT licensed: https://github.com/DuskPlug/DuskPlug
 
 ## If you try it
 
-Start with the MSI from [Releases](https://github.com/MrChriZ/DuskPlug/releases). First run opens Settings. If Smart Mode says it needs location, allow desktop apps in Windows Location privacy settings, then click **Detect Location**.
+Start with the MSI from [Releases](https://github.com/DuskPlug/DuskPlug/releases). First run opens Settings. If Smart Mode says it needs location, allow desktop apps in Windows Location privacy settings, then click **Detect Location**.
 
 If the Tuya portal shows no devices after linking, double-check the data center — UK/EU accounts sometimes need Western Europe instead of Central Europe.
 

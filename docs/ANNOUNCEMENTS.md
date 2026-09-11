@@ -21,10 +21,10 @@ DuskPlug is a small Win32/C++ system tray app that talks to your own Tuya Cloud 
 - Hibernate-aware: uses the plug's built-in countdown so the light still turns off after sleep
 
 MIT licensed, MSI installer + portable ZIP:
-https://github.com/MrChriZ/DuskPlug/releases/tag/v1.0.0
+https://github.com/DuskPlug/DuskPlug/releases/tag/v1.0.0
 
 Getting started (Tuya portal walkthrough):
-https://github.com/MrChriZ/DuskPlug/blob/master/docs/GETTING-STARTED.md
+https://github.com/DuskPlug/DuskPlug/blob/master/docs/GETTING-STARTED.md
 
 Happy to answer questions about the Tuya API setup or the sleep/countdown approach.
 
@@ -46,8 +46,8 @@ What it does:
 
 You need a free Tuya developer project linked to the same Smart Life / Tuya app account as your phone. Full setup guide is in the repo.
 
-Release: https://github.com/MrChriZ/DuskPlug/releases/tag/v1.0.0  
-Guide: https://github.com/MrChriZ/DuskPlug/blob/master/docs/GETTING-STARTED.md
+Release: https://github.com/DuskPlug/DuskPlug/releases/tag/v1.0.0  
+Guide: https://github.com/DuskPlug/DuskPlug/blob/master/docs/GETTING-STARTED.md
 
 Feedback welcome — especially if you hit Tuya data-center / linking issues (UK/EU users sometimes need Western Europe vs Central Europe).
 
@@ -63,9 +63,9 @@ I published **DuskPlug**, an MIT-licensed Windows tray app that controls a Tuya 
 
 It uses the standard token + device commands flow (`switch_1`, optional `countdown_1` for delayed off on sleep). Setup requires linking your Smart Life app account in the developer portal — the step-by-step is here:
 
-https://github.com/MrChriZ/DuskPlug/blob/master/docs/GETTING-STARTED.md
+https://github.com/DuskPlug/DuskPlug/blob/master/docs/GETTING-STARTED.md
 
-Repo: https://github.com/MrChriZ/DuskPlug
+Repo: https://github.com/DuskPlug/DuskPlug
 
 Useful if you want a lightweight native alternative to scripting against the API yourself.
 

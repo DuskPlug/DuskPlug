@@ -12,7 +12,7 @@ DuskPlug never stores your credentials in the GitHub repo. They are saved only o
 
 ## 1. Download DuskPlug
 
-**Installer (recommended):** download **DuskPlug.msi** from [GitHub Releases](https://github.com/MrChriZ/DuskPlug/releases) and run it. Windows may ask for administrator approval. That puts DuskPlug in Program Files, adds a Start menu shortcut, and starts it when you log in.
+**Installer (recommended):** download **DuskPlug.msi** from [GitHub Releases](https://github.com/DuskPlug/DuskPlug/releases) and run it. Windows may ask for administrator approval. That puts DuskPlug in Program Files, adds a Start menu shortcut, and starts it when you log in.
 
 **Portable ZIP:** download **DuskPlug-Windows.zip** and unzip it anywhere (for example `Documents\DuskPlug`). Double-click **`Start-DuskPlug.cmd`**.
 

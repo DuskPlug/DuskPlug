@@ -7,7 +7,7 @@ Source-of-truth manifests for submitting DuskPlug to [microsoft/winget-pkgs](htt
 1. Fork `microsoft/winget-pkgs`.
 2. Copy the three YAML files into:
    ```
-   manifests/m/MrChriZ/DuskPlug/<version>/
+   manifests/d/DuskPlug/DuskPlug/<version>/
    ```
 3. On each release, update:
    - `PackageVersion` in all three files
@@ -18,11 +18,11 @@ Source-of-truth manifests for submitting DuskPlug to [microsoft/winget-pkgs](htt
 ## Verify locally
 
 ```powershell
-winget validate --manifest manifests/m/MrChriZ/DuskPlug/1.0.0
+winget validate --manifest manifests/d/DuskPlug/DuskPlug/1.0.1
 ```
 
 After merge, users can install with:
 
 ```powershell
-winget install MrChriZ.DuskPlug
+winget install DuskPlug.DuskPlug
 ```
