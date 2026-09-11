@@ -1,0 +1,122 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package
+      Name="DuskPlug"
+      Manufacturer="MrChriZ"
+      Version="1.0.0"
+      UpgradeCode="8F3C2A91-7B4E-4D16-A9E2-1C5B8F0D3A27"
+      Compressed="yes">
+    <SummaryInformation Description="Tray app to control a Tuya smart plug" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of DuskPlug is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="DuskPlug.exe" SourceFile="..\assets\app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="DuskPlug.exe" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/MrChriZ/DuskPlug" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/MrChriZ/DuskPlug" />
+
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch DuskPlug now" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+
+    <util:CloseApplication
+        Id="CloseDuskPlug"
+        Target="DuskPlug.exe"
+        CloseMessage="yes"
+        Timeout="5"
+        TerminateProcess="1"
+        RebootPrompt="no" />
+
+    <!-- Close the app under its pre-rename name when upgrading from SmartTray -->
+    <util:CloseApplication
+        Id="CloseLegacySmartTray"
+        Target="SmartTray.exe"
+        CloseMessage="yes"
+        Timeout="5"
+        TerminateProcess="1"
+        RebootPrompt="no" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="DuskPlug">
+        <Directory Id="AssetsFolder" Name="assets" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component>
+        <File Id="DuskPlugExe" Source="..\DuskPlug.exe" KeyPath="yes">
+          <Shortcut
+              Id="StartMenuShortcutLink"
+              Directory="ProgramMenuFolder"
+              Name="DuskPlug"
+              Description="Control your Tuya smart plug from the tray"
+              WorkingDirectory="INSTALLFOLDER"
+              Advertise="yes"
+              Icon="DuskPlug.exe" />
+        </File>
+      </Component>
+      <Component>
+        <File Source="..\LICENSE" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="AssetFiles" Directory="AssetsFolder">
+      <Component>
+        <File Source="..\assets\app.ico" />
+      </Component>
+      <Component>
+        <File Source="..\assets\light-on.ico" />
+      </Component>
+      <Component>
+        <File Source="..\assets\light-off.ico" />
+      </Component>
+      <Component>
+        <File Source="..\assets\light-smart.ico" />
+      </Component>
+      <Component>
+        <File Source="..\assets\light-smart-on.ico" />
+      </Component>
+      <Component>
+        <File Source="..\assets\light-smart-off.ico" />
+      </Component>
+    </ComponentGroup>
+
+    <Component Id="StartupRun" Directory="INSTALLFOLDER" Guid="C3B02D58-4F69-5011-AE7B-9D2F5A8C3B01">
+      <RegistryValue
+          Root="HKMU"
+          Key="Software\Microsoft\Windows\CurrentVersion\Run"
+          Name="DuskPlug"
+          Type="string"
+          Value="&quot;[INSTALLFOLDER]DuskPlug.exe&quot;"
+          KeyPath="yes" />
+    </Component>
+
+    <Feature Id="Main" Title="DuskPlug" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="AssetFiles" />
+      <ComponentRef Id="StartupRun" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+    <CustomAction
+        Id="LaunchApp"
+        FileRef="DuskPlugExe"
+        ExeCommand=""
+        Return="asyncNoWait"
+        Impersonate="yes" />
+
+    <UI>
+      <Publish
+          Dialog="ExitDialog"
+          Control="Finish"
+          Event="DoAction"
+          Value="LaunchApp"
+          Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+  </Package>
+</Wix>

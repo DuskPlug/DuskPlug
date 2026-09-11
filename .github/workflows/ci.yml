@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW
+        run: winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e --accept-source-agreements --accept-package-agreements
+
+      - name: Run unit tests
+        run: cpp/test.cmd
+
+  release:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW
+        run: winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e --accept-source-agreements --accept-package-agreements
+
+      - name: Build DuskPlug
+        run: cpp/build.cmd
+
+      - name: Build MSI
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File installer/build-msi.ps1
+
+      - name: Package release ZIP
+        shell: pwsh
+        run: |
+          $staging = New-Item -ItemType Directory -Path release-staging -Force
+          Copy-Item DuskPlug.exe, config.example.json, README.md, Setup.ps1, Setup.cmd, Start-DuskPlug.cmd, Install-Startup.ps1, Install-Startup.cmd, Uninstall-Startup.ps1, Uninstall-Startup.cmd, Build-DuskPlug.cmd -Destination $staging
+          Copy-Item -Recurse assets, lib, docs -Destination $staging
+          Compress-Archive -Path "$staging\*" -DestinationPath DuskPlug-Windows.zip
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            DuskPlug-Windows.zip
+            DuskPlug.msi

@@ -1,0 +1,14 @@
+{
+  "ClientId": "your_access_id_from_project_overview_authorization_key",
+  "ClientSecret": "your_access_secret_from_project_overview_authorization_key",
+  "DeviceId": "your_20_character_device_id_from_all_devices",
+  "BaseUrl": "https://openapi.tuyaeu.com",
+  "SwitchCode": "switch_1",
+  "Latitude": 53.48,
+  "Longitude": -2.24,
+  "DarkOffsetMinutes": 0,
+  "LightOffsetMinutes": 0,
+  "LockOffSeconds": 30,
+  "ScheduleOnTime": "18:00",
+  "ScheduleOffTime": "23:00"
+}

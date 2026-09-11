@@ -1,0 +1,26 @@
+# Secrets and local user settings (live values live in %APPDATA%\SMART)
+config.json
+state.json
+
+# Build outputs
+*.exe
+*.msi
+*.zip
+*.wixpdb
+installer/bin/
+installer/obj/
+release-staging/
+*.o
+*.obj
+*.res
+*.pdb
+*.ilk
+*.log
+cpp/build/
+cpp/DuskPlugTests.exe
+smarttray_config_test.json
+
+# OS junk
+Thumbs.db
+Desktop.ini
+.DS_Store
