@@ -23,7 +23,9 @@
 3. Optionally update the Scoop manifest in [`packaging/scoop/`](../packaging/scoop/).
 4. Write release notes on GitHub — highlight user-visible changes. Mention code signing when SignPath is active.
 
-## SignPath secrets (when approved)
+## SignPath (when approved)
+
+Update your SignPath application so project URLs point at **https://github.com/DuskPlug/DuskPlug** (repo moved from a personal account to the `DuskPlug` org).
 
 Add these repository secrets in GitHub → Settings → Secrets → Actions:
 
