@@ -4,7 +4,7 @@
   <Package
       Name="DuskPlug"
       Manufacturer="MrChriZ"
-      Version="1.0.0"
+      Version="1.0.1"
       UpgradeCode="8F3C2A91-7B4E-4D16-A9E2-1C5B8F0D3A27"
       Compressed="yes">
     <SummaryInformation Description="Tray app to control a Tuya smart plug" />
@@ -106,7 +106,7 @@
     <CustomAction
         Id="LaunchApp"
         FileRef="DuskPlugExe"
-        ExeCommand=""
+        ExeCommand="--settings"
         Return="asyncNoWait"
         Impersonate="yes" />
 

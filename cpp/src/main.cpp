@@ -588,6 +588,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+    bool openSettingsOnStart = false;
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv) {
@@ -596,6 +597,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
                 const int rc = RunGetLocationMode();
                 LocalFree(argv);
                 return rc;
+            }
+            if (_wcsicmp(argv[i], L"--settings") == 0) {
+                openSettingsOnStart = true;
             }
         }
         LocalFree(argv);
@@ -718,28 +722,24 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     }
 
     if (!IsConfigComplete(g_app.config)) {
-        if (!ShowSettingsDialog(g_app.hwnd, configPath, g_app.config) || !IsConfigComplete(g_app.config)) {
-            MessageBoxW(
-                g_app.hwnd,
-                L"DuskPlug needs your plug connection details before it can run.\n\n"
-                L"Open Settings from the tray menu when you are ready to finish setup.",
-                L"DuskPlug",
-                MB_ICONINFORMATION | MB_OK);
-            DestroyWindow(g_app.hwnd);
-            if (g_mutex) {
-                CloseHandle(g_mutex);
-            }
-            return 1;
+        if (openSettingsOnStart) {
+            RunSettings();
+        } else {
+            ShowSetupBalloon(
+                L"DuskPlug needs your plug connection details.\n"
+                L"Right-click the tray icon and choose Settings...");
         }
     }
 
-    g_app.client = std::make_unique<TuyaClient>(g_app.config);
+    if (IsConfigComplete(g_app.config)) {
+        g_app.client = std::make_unique<TuyaClient>(g_app.config);
 
-    SmartModeCallbacks callbacks{};
-    callbacks.updateTray = UpdateTrayDisplay;
-    callbacks.showSetupBalloon = ShowSetupBalloon;
-    callbacks.isBusy = []() { return g_app.busy; };
-    g_app.smart.Initialize(g_app.hwnd, g_app.config, g_app.appDir, g_app.client.get(), callbacks);
+        SmartModeCallbacks callbacks{};
+        callbacks.updateTray = UpdateTrayDisplay;
+        callbacks.showSetupBalloon = ShowSetupBalloon;
+        callbacks.isBusy = []() { return g_app.busy; };
+        g_app.smart.Initialize(g_app.hwnd, g_app.config, g_app.appDir, g_app.client.get(), callbacks);
+    }
 
     SetTimer(g_app.hwnd, IDT_POLL, 30000, nullptr);
 
