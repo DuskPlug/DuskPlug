@@ -8,9 +8,9 @@ Free, open source, and MIT-licensed. You only need your own free Tuya cloud proj
 
 ## Screenshots
 
-**Tray icons** (manual, smart, off):
+**System tray** (real Windows 11 taskbar):
 
-![Tray icons on the Windows taskbar](docs/screenshots/tray-modes.png)
+![DuskPlug in the system tray](docs/screenshots/tray-in-taskbar.png)
 
 **Context menu**:
 
