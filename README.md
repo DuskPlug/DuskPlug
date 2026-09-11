@@ -8,9 +8,15 @@ Free, open source, and MIT-licensed. You only need your own free Tuya cloud proj
 
 ## Screenshots
 
-| Tray icons (manual, smart, off) | Context menu |
-|---------------------------------|--------------|
-| ![Tray modes](docs/screenshots/tray-modes.png) | ![Tray menu](docs/screenshots/tray-menu.png) |
+**Tray icons** (manual, smart, off):
+
+![Tray icons on the Windows taskbar](docs/screenshots/tray-modes.png)
+
+**Context menu**:
+
+![Tray context menu with Smart Mode enabled](docs/screenshots/tray-menu.png)
+
+**Settings**:
 
 ![Settings dialog](docs/screenshots/settings-dialog.png)
 
