@@ -5,6 +5,9 @@
 #endif
 #include <windows.h>
 
+#include <cstdio>
+#include <cstdlib>
+#include <string>
 #include <vector>
 
 namespace {
@@ -61,63 +64,51 @@ struct WinPhysicalMonitor {
     WCHAR description[128]{};
 };
 
-class WinBrightnessController : public IBrightnessController {
+std::string RunCommandCapture(const std::string& command) {
+    std::string output;
+    FILE* pipe = _popen(command.c_str(), "r");
+    if (!pipe) {
+        return output;
+    }
+
+    char buffer[256];
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        output += buffer;
+    }
+    _pclose(pipe);
+    return output;
+}
+
+bool RunCommandOk(const std::string& command) {
+    return std::system(command.c_str()) == 0;
+}
+
+class DdcBrightnessBackend {
 public:
-    bool AnyControllable() const override {
+    bool AnyControllable() const {
         return !monitors_.empty();
     }
 
-    void Capture() override {
-        if (captured_) {
-            return;
-        }
-
+    void Capture(std::vector<DWORD>& outValues) {
         EnsureMonitors();
-        capturedValues_.clear();
-        capturedValues_.reserve(monitors_.size());
-
         for (const auto& monitor : monitors_) {
             DWORD minValue = 0;
             DWORD currentValue = 0;
             DWORD maxValue = 0;
             if (api_.getBrightness(monitor.handle, &minValue, &currentValue, &maxValue)) {
-                capturedValues_.push_back(currentValue);
-            } else {
-                capturedValues_.push_back(0);
+                outValues.push_back(currentValue);
             }
         }
-
-        captured_ = true;
-        lastPercent_ = -1;
     }
 
-    void Restore() override {
-        if (!captured_) {
-            return;
-        }
-
+    void Restore(const std::vector<DWORD>& values) {
         EnsureMonitors();
-        for (size_t i = 0; i < monitors_.size() && i < capturedValues_.size(); ++i) {
-            api_.setBrightness(monitors_[i].handle, capturedValues_[i]);
+        for (size_t i = 0; i < monitors_.size() && i < values.size(); ++i) {
+            api_.setBrightness(monitors_[i].handle, values[i]);
         }
-
-        captured_ = false;
-        lastPercent_ = -1;
-        capturedValues_.clear();
-        ReleaseMonitors();
     }
 
-    bool SetPercent(int percent) override {
-        if (percent < 0) {
-            percent = 0;
-        } else if (percent > 100) {
-            percent = 100;
-        }
-
-        if (lastPercent_ == percent) {
-            return AnyControllable();
-        }
-
+    bool SetPercent(int percent) {
         EnsureMonitors();
         bool anySet = false;
         for (const auto& monitor : monitors_) {
@@ -134,20 +125,16 @@ public:
                 anySet = true;
             }
         }
-
-        if (anySet) {
-            lastPercent_ = percent;
-        }
         return anySet;
+    }
+
+    void Reset() {
+        ReleaseMonitors();
     }
 
 private:
     void EnsureMonitors() {
-        if (!api_.Load()) {
-            return;
-        }
-
-        if (!monitors_.empty()) {
+        if (!api_.Load() || !monitors_.empty()) {
             return;
         }
 
@@ -155,7 +142,7 @@ private:
             nullptr,
             nullptr,
             [](HMONITOR monitor, HDC, LPRECT, LPARAM data) -> BOOL {
-                auto* self = reinterpret_cast<WinBrightnessController*>(data);
+                auto* self = reinterpret_cast<DdcBrightnessBackend*>(data);
                 DWORD count = 0;
                 if (!self->api_.getCount(monitor, &count) || count == 0) {
                     return TRUE;
@@ -194,13 +181,150 @@ private:
         monitors_.clear();
     }
 
-    ~WinBrightnessController() override {
-        ReleaseMonitors();
-    }
-
     Dxva2Api api_;
     std::vector<PhysicalMonitor> monitors_;
-    std::vector<DWORD> capturedValues_;
+};
+
+class WmiBrightnessBackend {
+public:
+    bool AnyControllable() const {
+        return EnsureAvailable();
+    }
+
+    void Capture(std::vector<DWORD>& outValues) {
+        if (!EnsureAvailable()) {
+            return;
+        }
+
+        const std::string output = RunCommandCapture(
+            "powershell -NoProfile -NonInteractive -Command "
+            "\"$b = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction SilentlyContinue; "
+            "if (-not $b) { $b = Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness -ErrorAction SilentlyContinue }; "
+            "if ($b) { $b | Select-Object -ExpandProperty CurrentBrightness }\"");
+        size_t start = 0;
+        while (start < output.size()) {
+            const size_t end = output.find_first_of("\r\n", start);
+            const std::string line = output.substr(start, end == std::string::npos ? std::string::npos : end - start);
+            if (!line.empty()) {
+                outValues.push_back(static_cast<DWORD>(std::atoi(line.c_str())));
+            }
+            if (end == std::string::npos) {
+                break;
+            }
+            start = end + 1;
+            if (start < output.size() && output[start] == '\n') {
+                ++start;
+            }
+        }
+    }
+
+    void Restore(const std::vector<DWORD>& values) {
+        if (!EnsureAvailable() || values.empty()) {
+            return;
+        }
+
+        for (const DWORD value : values) {
+            const std::string command =
+                "powershell -NoProfile -NonInteractive -Command "
+                "\"$m = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue; "
+                "if (-not $m) { $m = Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue }; "
+                "if ($m) { $m | ForEach-Object { $_.WmiSetBrightness(1, "
+                + std::to_string(value) + ") } }\" >nul 2>&1";
+            RunCommandOk(command);
+        }
+    }
+
+    bool SetPercent(int percent) {
+        if (!EnsureAvailable()) {
+            return false;
+        }
+
+        const std::string command =
+            "powershell -NoProfile -NonInteractive -Command "
+            "\"$m = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue; "
+            "if (-not $m) { $m = Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue }; "
+            "if ($m) { $m | ForEach-Object { $_.WmiSetBrightness(1, "
+            + std::to_string(percent) + ") } }\" >nul 2>&1";
+        return RunCommandOk(command);
+    }
+
+private:
+    bool EnsureAvailable() const {
+        if (probed_) {
+            return available_;
+        }
+
+        probed_ = true;
+        const std::string output = RunCommandCapture(
+            "powershell -NoProfile -NonInteractive -Command "
+            "\"$m = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue; "
+            "if (-not $m) { $m = Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue }; "
+            "if ($m) { @($m).Count } else { 0 }\"");
+        available_ = std::atoi(output.c_str()) > 0;
+        return available_;
+    }
+
+    mutable bool probed_ = false;
+    mutable bool available_ = false;
+};
+
+class WinBrightnessController : public IBrightnessController {
+public:
+    bool AnyControllable() const override {
+        return ddc_.AnyControllable() || wmi_.AnyControllable();
+    }
+
+    void Capture() override {
+        if (captured_) {
+            return;
+        }
+
+        ddcCapturedValues_.clear();
+        wmiCapturedValues_.clear();
+        ddc_.Capture(ddcCapturedValues_);
+        wmi_.Capture(wmiCapturedValues_);
+        captured_ = true;
+        lastPercent_ = -1;
+    }
+
+    void Restore() override {
+        if (!captured_) {
+            return;
+        }
+
+        ddc_.Restore(ddcCapturedValues_);
+        wmi_.Restore(wmiCapturedValues_);
+        captured_ = false;
+        lastPercent_ = -1;
+        ddcCapturedValues_.clear();
+        wmiCapturedValues_.clear();
+        ddc_.Reset();
+    }
+
+    bool SetPercent(int percent) override {
+        if (percent < 0) {
+            percent = 0;
+        } else if (percent > 100) {
+            percent = 100;
+        }
+
+        if (lastPercent_ == percent) {
+            return AnyControllable();
+        }
+
+        const bool ddcSet = ddc_.SetPercent(percent);
+        const bool wmiSet = wmi_.SetPercent(percent);
+        if (ddcSet || wmiSet) {
+            lastPercent_ = percent;
+        }
+        return ddcSet || wmiSet;
+    }
+
+private:
+    DdcBrightnessBackend ddc_;
+    WmiBrightnessBackend wmi_;
+    std::vector<DWORD> ddcCapturedValues_;
+    std::vector<DWORD> wmiCapturedValues_;
     bool captured_ = false;
     int lastPercent_ = -1;
 };

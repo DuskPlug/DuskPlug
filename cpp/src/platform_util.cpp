@@ -266,6 +266,8 @@ bool EnsureConfigFileAt(const std::string& path) {
   "DarkOffsetMinutes": 0,
   "LightOffsetMinutes": 0,
   "LockOffSeconds": 30,
+  "ScreenBrightnessNight": 20,
+  "ScreenBrightnessDay": 80,
   "ScheduleOnTime": "18:00",
   "ScheduleOffTime": "23:00"
 })";

@@ -1,14 +1,34 @@
 {
   "ClientId": "your_access_id_from_project_overview_authorization_key",
   "ClientSecret": "your_access_secret_from_project_overview_authorization_key",
-  "DeviceId": "your_20_character_device_id_from_all_devices",
   "BaseUrl": "https://openapi.tuyaeu.com",
-  "SwitchCode": "switch_1",
+  "Devices": [
+    {
+      "Id": "your_20_character_device_id_from_all_devices",
+      "Name": "Living room lamp",
+      "Type": "bulb",
+      "Enabled": true,
+      "Capabilities": {
+        "switch": "switch_led",
+        "brightness": "bright_value_v2",
+        "brightnessMin": 10,
+        "brightnessMax": 1000
+      },
+      "Automation": {
+        "mode": "smart",
+        "scheduleOnTime": "18:00",
+        "scheduleOffTime": "23:00",
+        "darkOffsetMinutes": 0,
+        "lightOffsetMinutes": 0,
+        "nightBrightness": 20,
+        "dayBrightness": 80,
+        "useBrightness": true
+      }
+    }
+  ],
   "Latitude": 53.48,
   "Longitude": -2.24,
-  "DarkOffsetMinutes": 0,
-  "LightOffsetMinutes": 0,
   "LockOffSeconds": 30,
-  "ScheduleOnTime": "18:00",
-  "ScheduleOffTime": "23:00"
+  "ScreenBrightnessNight": 20,
+  "ScreenBrightnessDay": 80
 }

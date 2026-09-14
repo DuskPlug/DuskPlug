@@ -1,6 +1,7 @@
 #pragma once
 #include <optional>
 #include <string>
+#include <vector>
 
 std::optional<std::string> JsonGetString(const std::string& json, const std::string& key);
 std::optional<double> JsonGetNumber(const std::string& json, const std::string& key);
@@ -13,3 +14,5 @@ std::optional<std::string> JsonGetAssetField(
     const std::string& assetKey,
     const std::string& fieldKey);
 bool JsonStatusValueForCode(const std::string& json, const std::string& code, bool& out);
+bool JsonStatusIntForCode(const std::string& json, const std::string& code, int& out);
+std::vector<std::string> JsonGetArrayObjectSlices(const std::string& json, const std::string& key);

@@ -1,24 +1,29 @@
 #Requires -Version 5.1
+param(
+    [switch]$Clean,
+    [int]$Jobs = 0
+)
+
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'build-common.ps1')
+
 $CppRoot = $PSScriptRoot
+$Root = Split-Path $CppRoot -Parent
 $Src = Join-Path $CppRoot 'src'
 $Tests = Join-Path $CppRoot 'tests'
 $Out = Join-Path $CppRoot 'DuskPlugTests.exe'
+$ObjDir = Join-Path $CppRoot 'obj\test'
+$JobCount = Get-DuskPlugJobCount -Requested $Jobs
 
-$Gpp = $null
-$cmd = Get-Command g++ -ErrorAction SilentlyContinue
-if ($cmd) { $Gpp = $cmd.Source }
-if (-not $Gpp) {
-    $fallback = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\g++.exe"
-    if (Test-Path $fallback) { $Gpp = $fallback }
-}
-if (-not $Gpp) {
-    throw 'g++ not found. Install WinLibs: winget install BrechtSanders.WinLibs.POSIX.UCRT'
+if ($Clean -and (Test-Path -LiteralPath $ObjDir)) {
+    Remove-Item -LiteralPath $ObjDir -Recurse -Force
 }
 
-$flags = @('-std=c++17', '-O0', '-Wall', "-I$Src", "-I$Tests")
-& (Join-Path (Split-Path $CppRoot -Parent) 'scripts\generate-version-h.ps1')
+$Gpp = Get-DuskPlugGpp
+
+$flags = @('-std=c++17', '-O0', '-g', '-Wall', "-I$Src", "-I$Tests")
+& (Join-Path $Root 'scripts\generate-version-h.ps1')
 
 $sources = @(
     (Join-Path $Tests 'test_main.cpp'),
@@ -30,19 +35,59 @@ $sources = @(
     (Join-Path $Tests 'coords_test.cpp'),
     (Join-Path $Tests 'semver_test.cpp'),
     (Join-Path $Tests 'update_checker_test.cpp'),
+    (Join-Path $Tests 'settings_page_test.cpp'),
     (Join-Path $Src 'schedule.cpp'),
     (Join-Path $Src 'json_util.cpp'),
     (Join-Path $Src 'crypto.cpp'),
     (Join-Path $Src 'solar.cpp'),
     (Join-Path $Src 'config.cpp'),
     (Join-Path $Src 'coords.cpp'),
+    (Join-Path $Src 'settings_page.cpp'),
     (Join-Path $Src 'platform_util.cpp'),
-    (Join-Path $Src 'semver.cpp')
+    (Join-Path $Src 'semver.cpp'),
+    (Join-Path $Src 'tuya_client.cpp'),
+    (Join-Path $Src 'http_win.cpp')
 )
 
-Write-Host "Building DuskPlug tests..." -ForegroundColor Cyan
-& $Gpp @flags $sources '-o' $Out '-ladvapi32' '-lole32' '-lshell32' '-lcrypt32'
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+New-Item -ItemType Directory -Force -Path $ObjDir | Out-Null
+
+$stampPath = Join-Path $ObjDir 'flags.txt'
+$stampText = Get-FlagStampText -Compiler $Gpp -Flags $flags
+$flagsChanged = -not (Test-FlagStamp -StampPath $stampPath -StampText $stampText)
+
+Write-Host "Building DuskPlug tests with $Gpp ($JobCount jobs)..." -ForegroundColor Cyan
+
+$compileJobs = @()
+$objects = @()
+foreach ($src in $sources) {
+    $obj = Join-Path $ObjDir (Get-DuskPlugObjName $src)
+    $dep = Join-Path $ObjDir (Get-DuskPlugDepName $src)
+    $objects += $obj
+    if ($flagsChanged -or (Test-CppObjectOutdated -ObjectPath $obj -SourcePath $src -DepPath $dep)) {
+        $compileJobs += @{
+            Name = [IO.Path]::GetFileName($src)
+            Args = $flags + @('-c', $src, '-o', $obj, '-MMD', '-MP', '-MF', $dep)
+        }
+    }
+}
+
+if ($compileJobs.Count -gt 0) {
+    Write-Host "Compiling $($compileJobs.Count) file(s)..." -ForegroundColor Cyan
+    Invoke-ParallelNative -FilePath $Gpp -Jobs $compileJobs -MaxJobs $JobCount
+} else {
+    Write-Host 'Objects up to date.' -ForegroundColor DarkGray
+}
+
+$needLink = $flagsChanged -or (Test-AnyInputNewerThan -OutputPath $Out -Inputs $objects)
+if ($needLink) {
+    Write-Host 'Linking tests...' -ForegroundColor Cyan
+    & $Gpp $objects '-o' $Out '-ladvapi32' '-lole32' '-lshell32' '-lcrypt32' '-lwinhttp'
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} else {
+    Write-Host 'Link up to date.' -ForegroundColor DarkGray
+}
+
+Write-FlagStamp -StampPath $stampPath -StampText $stampText
 
 Push-Location $CppRoot
 try {
@@ -51,5 +96,5 @@ try {
 }
 finally {
     Pop-Location
-    Remove-Item -Force -ErrorAction SilentlyContinue $Out, (Join-Path $CppRoot 'duskplug_config_test.json')
+    Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $CppRoot 'duskplug_config_test.json')
 }

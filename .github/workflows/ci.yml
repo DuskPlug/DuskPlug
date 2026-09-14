@@ -60,7 +60,7 @@ jobs:
         run: winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e --accept-source-agreements --accept-package-agreements
 
       - name: Build DuskPlug
-        run: cpp/build.cmd
+        run: cpp/build.cmd -Release
 
       - name: Build MSI
         run: powershell -NoProfile -ExecutionPolicy Bypass -File installer/build-msi.ps1

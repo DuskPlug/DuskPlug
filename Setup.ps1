@@ -34,15 +34,15 @@ function Show-LinkGuide {
     Write-Host '     Access Secret / Client Secret -> Setup will ask for this'
     Write-Host '   Pick your data center in Setup (must match the project Overview page).'
     Write-Host ''
-    Write-Host 'D) Link your phone app account (this is the step most people miss)'
+    Write-Host 'D) Link your phone app account'
     Write-Host '   Open Project -> Devices -> Link Tuya App Account -> Add App Account'
     Write-Host '   Choose Tuya App Account Authorization if asked.'
     Write-Host '   Scan the QR code from the same app where your plug already works.'
     Write-Host '   Confirm on the phone. Leave Automatic Link selected.'
     Write-Host ''
-    Write-Host 'E) Copy your plug Device ID'
+    Write-Host 'E) Copy your device Device ID(s)'
     Write-Host '   Project -> Devices tab -> All Devices'
-    Write-Host '   Find your plug and copy its Device ID (about 20 characters).'
+    Write-Host '   Find each plug or bulb and copy its Device ID (about 20 characters).'
     Write-Host ''
 }
 
@@ -53,14 +53,21 @@ function Test-InteractiveHost {
 function Test-ConfigReady {
     param($Config)
 
-    foreach ($key in @('ClientId', 'ClientSecret', 'DeviceId', 'BaseUrl')) {
+    foreach ($key in @('ClientId', 'ClientSecret', 'BaseUrl')) {
         $value = $Config.$key
         if ([string]::IsNullOrWhiteSpace($value) -or $value -match 'your_') {
             return $false
         }
     }
 
-    return $true
+    $devices = Get-SmartConfigDevices -Config $Config
+    foreach ($device in $devices) {
+        if (-not [string]::IsNullOrWhiteSpace($device.Id) -and $device.Id -notmatch 'your_') {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Initialize-Config {
@@ -101,21 +108,7 @@ function Read-RequiredValue {
     }
 }
 
-function Invoke-SetupWizard {
-    param([string]$ConfigPath)
-
-    Write-Host ''
-    Write-Host '=== DuskPlug setup ===' -ForegroundColor Cyan
-    Write-Host 'This connects your Tuya smart plug to Windows.'
-    Write-Host ''
-    Show-LinkGuide
-
-    Write-Host ''
-    Write-Host '=== Enter your credentials ===' -ForegroundColor Cyan
-    $clientId = Read-RequiredValue 'Access ID / Client ID'
-    $clientSecret = Read-RequiredValue 'Access Secret / Client Secret'
-    $deviceId = Read-RequiredValue 'Device ID (20 characters)'
-
+function Read-DataCenterChoice {
     Write-Host ''
     Write-Host 'Select your Tuya data center:'
     Write-Host '  1) Central Europe (UK / most EU)'
@@ -132,35 +125,93 @@ function Invoke-SetupWizard {
             Write-Host 'Please enter a number from 1 to 6.' -ForegroundColor Yellow
         }
     }
-    $baseUrl = Get-TuyaDataCenterUrl -Choice $choice
+    return Get-TuyaDataCenterUrl -Choice $choice
+}
 
-    $values = @{
+function New-SetupDeviceEntry {
+    param(
+        [Parameter(Mandatory)][string]$DeviceId,
+        [string]$Name,
+        $Discovered
+    )
+
+    $displayName = if ([string]::IsNullOrWhiteSpace($Name)) { $DeviceId } else { $Name.Trim() }
+    return [ordered]@{
+        Id           = $DeviceId.Trim()
+        Name         = $displayName
+        Type         = $Discovered.Type
+        Enabled      = $true
+        Capabilities = $Discovered.Capabilities
+        Automation   = [ordered]@{
+            mode                = 'manual'
+            scheduleOnTime      = '18:00'
+            scheduleOffTime     = '23:00'
+            darkOffsetMinutes   = 0
+            lightOffsetMinutes  = 0
+            nightBrightness     = 20
+            dayBrightness       = 80
+            useBrightness       = ($Discovered.Type -eq 'bulb')
+        }
+    }
+}
+
+function Invoke-SetupWizard {
+    param([string]$ConfigPath)
+
+    Write-Host ''
+    Write-Host '=== DuskPlug setup ===' -ForegroundColor Cyan
+    Write-Host 'This connects your Tuya plugs and bulbs to Windows.'
+    Write-Host ''
+    Show-LinkGuide
+
+    Write-Host ''
+    Write-Host '=== Enter your credentials ===' -ForegroundColor Cyan
+    $clientId = Read-RequiredValue 'Access ID / Client ID'
+    $clientSecret = Read-RequiredValue 'Access Secret / Client Secret'
+    $baseUrl = Read-DataCenterChoice
+
+    $tempConfig = [pscustomobject]@{
         ClientId     = $clientId
         ClientSecret = $clientSecret
-        DeviceId     = $deviceId
         BaseUrl      = $baseUrl
+        DeviceId     = 'pending'
+        SwitchCode   = 'switch_1'
     }
 
     Write-Host ''
-    $wantSchedule = Read-Host 'Set a daily on/off schedule now? [y/N]'
-    if ($wantSchedule -match '^[Yy]') {
-        $onTime = Read-Host 'Turn ON time (24h, e.g. 18:00) [18:00]'
-        if ([string]::IsNullOrWhiteSpace($onTime)) { $onTime = '18:00' }
-        $offTime = Read-Host 'Turn OFF time (24h, e.g. 23:00) [23:00]'
-        if ([string]::IsNullOrWhiteSpace($offTime)) { $offTime = '23:00' }
-        if ((Test-TimeHHMM $onTime) -and (Test-TimeHHMM $offTime)) {
-            $values.ScheduleOnTime = $onTime
-            $values.ScheduleOffTime = $offTime
-        } else {
-            Write-Host 'Invalid time format — using defaults 18:00 and 23:00.' -ForegroundColor Yellow
-            $values.ScheduleOnTime = '18:00'
-            $values.ScheduleOffTime = '23:00'
+    Write-Host '=== Add devices ===' -ForegroundColor Cyan
+    $devices = @()
+    do {
+        $deviceId = Read-RequiredValue 'Device ID (20 characters)'
+        $deviceName = Read-Host 'Friendly name (optional)'
+        Write-Host "Discovering functions for $deviceId..." -ForegroundColor Cyan
+
+        $token = Get-TuyaAccessToken -Config $tempConfig
+        $tempConfig | Add-Member -NotePropertyName DeviceId -NotePropertyValue $deviceId -Force
+        $functions = Get-TuyaDeviceFunctions -Config $tempConfig -AccessToken $token -DeviceId $deviceId
+        $discovered = Get-TuyaDiscoveredCapabilities -Functions $functions
+        Write-Host "Detected: $($discovered.Type) (switch $($discovered.SwitchCode))" -ForegroundColor Green
+        if ($discovered.Capabilities.brightness) {
+            Write-Host "Brightness DP: $($discovered.Capabilities.brightness)" -ForegroundColor Green
         }
+
+        $devices += New-SetupDeviceEntry -DeviceId $deviceId -Name $deviceName -Discovered $discovered
+        $another = Read-Host 'Add another device? [y/N]'
+    } while ($another -match '^[Yy]')
+
+    $primary = $devices[0]
+    $values = @{
+        ClientId     = $clientId
+        ClientSecret = $clientSecret
+        BaseUrl      = $baseUrl
+        Devices      = $devices
+        DeviceId     = $primary.Id
+        SwitchCode   = $primary.Capabilities.switch
     }
 
     Save-SmartConfig -Values $values -ConfigPath $ConfigPath | Out-Null
     Write-Host ''
-    Write-Host "Saved settings to $ConfigPath" -ForegroundColor Green
+    Write-Host "Saved $($devices.Count) device(s) to $ConfigPath" -ForegroundColor Green
 }
 
 function Offer-PostSetupActions {
@@ -206,46 +257,51 @@ Write-Host '=== Testing Tuya connection ===' -ForegroundColor Cyan
 
 try {
     $config = Get-TuyaConfig -ConfigPath $configPath
-    Write-Host "Using device $($config.DeviceId) via $($config.BaseUrl)"
+    $allDevices = Get-SmartConfigDevices -Config $config
+    Write-Host "Using $($allDevices.Count) device(s) via $($config.BaseUrl)"
 
     $token = Get-TuyaAccessToken -Config $config
     Write-Host 'Access token: OK' -ForegroundColor Green
 
-    $functions = Get-TuyaDeviceFunctions -Config $config -AccessToken $token
-    Write-Host ''
-    Write-Host 'Supported device functions:'
-    $functions | Format-Table code, type, values -AutoSize
+    foreach ($device in $allDevices) {
+        Write-Host ''
+        Write-Host "=== $($device.Name) ($($device.Id)) ===" -ForegroundColor Cyan
+        $functions = Get-TuyaDeviceFunctions -Config $config -AccessToken $token -DeviceId $device.Id
+        Write-Host 'Supported device functions:'
+        $functions | Format-Table code, type, values -AutoSize
 
-    $switchFunctions = $functions | Where-Object { $_.type -eq 'Boolean' -or $_.code -like 'switch*' }
-    if ($switchFunctions -and ($switchFunctions.code -notcontains $config.SwitchCode)) {
-        $suggested = ($switchFunctions | Select-Object -First 1).code
-        Write-Host "Note: configured SwitchCode '$($config.SwitchCode)' was not found." -ForegroundColor Yellow
-        Write-Host "Consider using '$suggested' in your DuskPlug config instead." -ForegroundColor Yellow
+        $switchCode = Get-TuyaDeviceSwitchCode -Device $device
+        $switchFunctions = $functions | Where-Object { $_.type -eq 'Boolean' -or $_.code -like 'switch*' }
+        if ($switchFunctions -and ($switchFunctions.code -notcontains $switchCode)) {
+            $suggested = ($switchFunctions | Select-Object -First 1).code
+            Write-Host "Note: configured switch '$switchCode' was not found." -ForegroundColor Yellow
+            Write-Host "Consider using '$suggested' in DuskPlug Settings instead." -ForegroundColor Yellow
+        }
+
+        $status = Get-TuyaDeviceStatus -Config $config -AccessToken $token -DeviceId $device.Id
+        Write-Host 'Current device status:'
+        $status | Format-Table code, value -AutoSize
+
+        $current = Get-TuyaSwitchState -Config $config -AccessToken $token -DeviceId $device.Id
+        Write-Host "Switch '$switchCode' is currently: $(if ($current) { 'ON' } else { 'OFF' })" -ForegroundColor Green
     }
-
-    $status = Get-TuyaDeviceStatus -Config $config -AccessToken $token
-    Write-Host ''
-    Write-Host 'Current device status:'
-    $status | Format-Table code, value -AutoSize
-
-    $current = Get-TuyaSwitchState -Config $config -AccessToken $token
-    Write-Host "Switch '$($config.SwitchCode)' is currently: $(if ($current) { 'ON' } else { 'OFF' })" -ForegroundColor Green
 
     $test = 'N'
     if (Test-InteractiveHost) {
-        $test = Read-Host 'Run a live toggle test? (turn OFF then back ON) [y/N]'
+        $test = Read-Host 'Run a live toggle test on the first device? (turn OFF then back ON) [y/N]'
     }
     if ($test -match '^[Yy]') {
-        Write-Host 'Turning plug OFF...'
-        Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $false | Out-Null
+        $primary = Resolve-TuyaDevice -Config $config
+        Write-Host "Turning $($primary.Name) OFF..."
+        Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $false -DeviceId $primary.Id | Out-Null
         Start-Sleep -Seconds 2
 
-        Write-Host 'Turning plug ON...'
-        Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $true | Out-Null
+        Write-Host "Turning $($primary.Name) ON..."
+        Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $true -DeviceId $primary.Id | Out-Null
         Start-Sleep -Seconds 1
 
-        $after = Get-TuyaSwitchState -Config $config -AccessToken $token
-        Write-Host "Test complete. Plug is now: $(if ($after) { 'ON' } else { 'OFF' })" -ForegroundColor Green
+        $after = Get-TuyaSwitchState -Config $config -AccessToken $token -DeviceId $primary.Id
+        Write-Host "Test complete. Device is now: $(if ($after) { 'ON' } else { 'OFF' })" -ForegroundColor Green
     }
 
     Write-Host ''

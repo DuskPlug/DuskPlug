@@ -59,6 +59,9 @@
         </File>
       </Component>
       <Component>
+        <File Source="..\WebView2Loader.dll" />
+      </Component>
+      <Component>
         <File Source="..\LICENSE" />
       </Component>
     </ComponentGroup>
@@ -81,6 +84,9 @@
       </Component>
       <Component>
         <File Source="..\assets\light-smart-off.ico" />
+      </Component>
+      <Component>
+        <File Source="..\assets\settings.html" />
       </Component>
     </ComponentGroup>
 

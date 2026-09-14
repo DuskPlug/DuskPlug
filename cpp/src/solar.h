@@ -19,3 +19,10 @@ bool IsDark(
     double longitude,
     const AppConfig& config,
     SolarTimes* outTimes = nullptr);
+
+bool IsDarkWithOffsets(
+    double latitude,
+    double longitude,
+    int darkOffsetMinutes,
+    int lightOffsetMinutes,
+    SolarTimes* outTimes = nullptr);

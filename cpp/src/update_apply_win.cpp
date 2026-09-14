@@ -160,6 +160,7 @@ ApplyUpdateResult ApplyPortableUpdate(const UpdateInfo& info) {
     }
 
     const std::string updatedExe = stagingDir + "\\DuskPlug.exe";
+    const std::string updatedLoader = stagingDir + "\\WebView2Loader.dll";
     const std::string updatedAssets = stagingDir + "\\assets";
     if (!FileExists(updatedExe)) {
         result.error = "Update archive did not contain DuskPlug.exe.";
@@ -169,6 +170,10 @@ ApplyUpdateResult ApplyPortableUpdate(const UpdateInfo& info) {
     const std::string targetExe = appDir + "\\DuskPlug.exe";
     if (!CopyFileOverwrite(updatedExe, targetExe)) {
         result.error = "Could not replace DuskPlug.exe.";
+        return result;
+    }
+    if (FileExists(updatedLoader) && !CopyFileOverwrite(updatedLoader, appDir + "\\WebView2Loader.dll")) {
+        result.error = "Could not update WebView2Loader.dll.";
         return result;
     }
     if (FileExists(updatedAssets) && !CopyDirectoryRecursive(updatedAssets, appDir + "\\assets")) {

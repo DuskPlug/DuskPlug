@@ -28,5 +28,13 @@ $content = @"
 
 "@
 
+$existing = ''
+if (Test-Path -LiteralPath $OutFile) {
+    $existing = Get-Content -LiteralPath $OutFile -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+}
+if ($existing -eq $content) {
+    return
+}
+
 Set-Content -Path $OutFile -Value $content -NoNewline -Encoding utf8
 Write-Host "Wrote $OutFile ($version)"

@@ -1,7 +1,16 @@
 #Requires -Version 5.1
 
+param(
+    [string]$DeviceId
+)
+
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib\TuyaApi.ps1')
 
-$state = Invoke-TuyaPlugAction -Action On
-Write-Host "Plug turned ON ($state)."
+$params = @{ Action = 'On' }
+if ($DeviceId) {
+    $params.DeviceId = $DeviceId
+}
+
+$state = Invoke-TuyaPlugAction @params
+Write-Host "Device turned ON ($state)."

@@ -13,6 +13,7 @@
 #include <libayatana-appindicator/app-indicator.h>
 
 #include <atomic>
+#include <cstdio>
 #include <memory>
 #include <string>
 
@@ -25,6 +26,7 @@ struct AppState {
     SmartModeController smart;
     ILocationService* locationService = nullptr;
     LinuxActivityTracker* activityTracker = nullptr;
+    IBrightnessController* brightnessController = nullptr;
     std::string configPath;
     std::string appDir;
     std::atomic<bool> busy{false};
@@ -38,12 +40,15 @@ struct AppState {
 };
 
 AppState g_app;
+GtkWidget* g_menu = nullptr;
 GtkWidget* g_applyUpdateItem = nullptr;
+GtkWidget* g_lockOffItem = nullptr;
+GtkWidget* g_screenBrightnessItem = nullptr;
 
-void UpdateTrayDisplay(bool on);
-void RunPlugAction(bool toggle, bool setOn, bool statusOnly);
-void ExitAutomationMode();
+void UpdateTrayDisplay(bool anyOn, size_t onCount, size_t totalCount);
+void RunPlugAction(bool toggle, bool setOn, bool statusOnly, int deviceIndex = -1);
 void StartAutomationTimers();
+void RebuildMenu();
 
 void ShowMessage(const std::string& text) {
     GtkWidget* dialog = gtk_message_dialog_new(
@@ -57,69 +62,92 @@ void ShowMessage(const std::string& text) {
     gtk_widget_destroy(dialog);
 }
 
-void UpdateTrayDisplay(bool on) {
-    g_app.hasKnownState = true;
-    g_app.knownOn = on;
-    g_app.smart.SetKnownPlugState(on);
+void UpdateTrayDisplay(bool anyOn, size_t onCount, size_t totalCount) {
+    const bool automated = g_app.smart.HasAutomatedDevices();
+    g_app.hasKnownState = totalCount > 0;
+    g_app.knownOn = anyOn;
 
     const char* iconName = "light-off";
-    const char* label = "DuskPlug: OFF";
-    if (g_app.smart.IsScheduleEnabled() || g_app.smart.IsEnabled()) {
-        iconName = on ? "light-smart-on" : "light-smart-off";
-        label = on ? "DuskPlug: AUTO — ON" : "DuskPlug: AUTO — OFF";
+    char label[128] = "DuskPlug";
+
+    if (automated) {
+        iconName = anyOn ? "light-smart-on" : "light-smart-off";
     } else {
-        iconName = on ? "light-on" : "light-off";
-        label = on ? "DuskPlug: ON" : "DuskPlug: OFF";
+        iconName = anyOn ? "light-on" : "light-off";
+    }
+
+    if (totalCount <= 1) {
+        if (automated) {
+            snprintf(label, sizeof(label), anyOn ? "DuskPlug: AUTO — ON" : "DuskPlug: AUTO — OFF");
+        } else {
+            snprintf(label, sizeof(label), anyOn ? "DuskPlug: ON" : "DuskPlug: OFF");
+        }
+    } else {
+        snprintf(label, sizeof(label), "DuskPlug: %zu of %zu on", onCount, totalCount);
     }
 
     app_indicator_set_icon_full(g_app.indicator, iconName, label);
     app_indicator_set_status(g_app.indicator, APP_INDICATOR_STATUS_ACTIVE);
 }
 
-void RunPlugAction(bool toggle, bool setOn, bool statusOnly) {
+void RunPlugAction(bool toggle, bool setOn, bool statusOnly, int deviceIndex) {
     if (g_app.busy || !g_app.client) {
         return;
     }
-    if (!statusOnly) {
-        ExitAutomationMode();
+
+    const auto enabledDevices = GetEnabledDevices(g_app.config);
+    if (enabledDevices.empty()) {
+        return;
     }
 
     g_app.busy = true;
     std::string error;
-    bool on = false;
-    bool ok = false;
-    if (statusOnly) {
-        ok = g_app.client->GetSwitchState(on, error);
-    } else if (toggle) {
-        ok = g_app.client->Toggle(error, on);
+    size_t successCount = 0;
+
+    const auto operateDevice = [&](const DeviceConfig& device) {
+        if (statusOnly) {
+            DeviceState state{};
+            if (g_app.client->GetDeviceState(device, state, error)) {
+                g_app.smart.SetKnownDeviceState(device.id, state.switchOn);
+                ++successCount;
+            }
+            return;
+        }
+
+        if (toggle) {
+            bool newState = false;
+            if (g_app.smart.ToggleDevice(device, error, newState)) {
+                ++successCount;
+            }
+            return;
+        }
+
+        if (g_app.smart.SetDeviceSwitch(device, setOn, error)) {
+            ++successCount;
+        }
+    };
+
+    if (deviceIndex >= 0 && static_cast<size_t>(deviceIndex) < enabledDevices.size()) {
+        operateDevice(*enabledDevices[static_cast<size_t>(deviceIndex)]);
     } else {
-        ok = g_app.client->SetSwitch(setOn, error);
-        on = setOn;
+        for (const auto* device : enabledDevices) {
+            operateDevice(*device);
+        }
     }
 
-    if (ok) {
-        UpdateTrayDisplay(on);
+    if (successCount > 0) {
+        const size_t onCount = g_app.smart.GetKnownOnCount();
+        UpdateTrayDisplay(onCount > 0, onCount, enabledDevices.size());
     }
+
     g_app.busy = false;
 }
 
-void ExitAutomationMode() {
-    if (!g_app.smart.IsAutomationEnabled()) {
-        return;
-    }
-    if (g_app.smartTimer) {
-        g_source_remove(g_app.smartTimer);
-        g_app.smartTimer = 0;
-    }
-    if (g_app.lockTimer) {
-        g_source_remove(g_app.lockTimer);
-        g_app.lockTimer = 0;
-    }
-    g_app.smart.Disable();
-}
-
 gboolean OnPollTimer(gpointer) {
-    if (!g_app.smart.IsAutomationEnabled()) {
+    if (g_app.smart.IsScreenBrightnessEnabled()) {
+        g_app.smart.Evaluate();
+    }
+    if (!g_app.smart.HasAutomatedDevices()) {
         RunPlugAction(false, false, true);
     }
     return G_SOURCE_CONTINUE;
@@ -156,9 +184,11 @@ void ApplySettingsReload() {
     g_app.client = std::make_unique<TuyaClient>(g_app.config);
     g_app.smart.UpdateConfig(g_app.config);
     g_app.smart.UpdateClient(g_app.client.get());
-    if (g_app.smart.IsAutomationEnabled()) {
+    if (g_app.smart.HasAutomatedDevices() || g_app.smart.IsScreenBrightnessEnabled()) {
+        StartAutomationTimers();
         g_app.smart.Evaluate();
     }
+    RebuildMenu();
 }
 
 void OnSettings(GtkMenuItem*, gpointer) {
@@ -168,50 +198,17 @@ void OnSettings(GtkMenuItem*, gpointer) {
     }
 }
 
-void OnToggleSmart(GtkMenuItem*, gpointer) {
-    if (g_app.smart.IsEnabled()) {
-        ExitAutomationMode();
-        if (g_app.hasKnownState) {
-            UpdateTrayDisplay(g_app.knownOn);
-        }
-        return;
-    }
-    std::string error;
-    if (!g_app.smart.Enable(error, true)) {
-        if (!error.empty()) {
-            ShowMessage(error);
-        }
-        return;
-    }
-    StartAutomationTimers();
-    g_app.smart.Evaluate();
-}
-
-void OnToggleSchedule(GtkMenuItem*, gpointer) {
-    if (g_app.smart.IsScheduleEnabled()) {
-        ExitAutomationMode();
-        if (g_app.hasKnownState) {
-            UpdateTrayDisplay(g_app.knownOn);
-        }
-        return;
-    }
-    std::string error;
-    if (!g_app.smart.EnableSchedule(error)) {
-        if (!error.empty()) {
-            ShowMessage(error);
-        }
-        return;
-    }
-    StartAutomationTimers();
-    g_app.smart.Evaluate();
-}
-
 void OnTurnOn(GtkMenuItem*, gpointer) {
     RunPlugAction(false, true, false);
 }
 
 void OnTurnOff(GtkMenuItem*, gpointer) {
     RunPlugAction(false, false, false);
+}
+
+void OnToggleDevice(GtkMenuItem*, gpointer userData) {
+    const int deviceIndex = GPOINTER_TO_INT(userData);
+    RunPlugAction(true, false, false, deviceIndex);
 }
 
 void OnRefresh(GtkMenuItem*, gpointer) {
@@ -301,24 +298,39 @@ void MaybeBackgroundUpdateCheck() {
     HandleUpdateCheckResult(CheckForUpdates(g_app.installKind), false);
 }
 
-GtkWidget* g_lockOffItem = nullptr;
-
 void OnToggleLockOff(GtkCheckMenuItem* item, gpointer) {
-    if (!g_app.smart.IsAutomationEnabled()) {
+    if (!g_app.smart.HasAutomatedDevices()) {
         return;
     }
     g_app.smart.SetLockOffEnabled(gtk_check_menu_item_get_active(item) != FALSE);
 }
 
+void OnToggleScreenBrightness(GtkCheckMenuItem* item, gpointer) {
+    g_app.smart.SetScreenBrightnessEnabled(gtk_check_menu_item_get_active(item) != FALSE);
+}
+
 void OnMenuShow(GtkWidget*, gpointer) {
-    if (!g_lockOffItem) {
-        return;
+    const bool automated = g_app.smart.HasAutomatedDevices();
+    if (g_lockOffItem) {
+        gtk_widget_set_sensitive(g_lockOffItem, automated);
+        g_signal_handlers_block_by_func(g_lockOffItem, reinterpret_cast<gpointer>(OnToggleLockOff), nullptr);
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_lockOffItem), g_app.smart.IsLockOffEnabled());
+        g_signal_handlers_unblock_by_func(g_lockOffItem, reinterpret_cast<gpointer>(OnToggleLockOff), nullptr);
     }
-    const bool automation = g_app.smart.IsAutomationEnabled();
-    gtk_widget_set_sensitive(g_lockOffItem, automation);
-    g_signal_handlers_block_by_func(g_lockOffItem, reinterpret_cast<gpointer>(OnToggleLockOff), nullptr);
-    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_lockOffItem), g_app.smart.IsLockOffEnabled());
-    g_signal_handlers_unblock_by_func(g_lockOffItem, reinterpret_cast<gpointer>(OnToggleLockOff), nullptr);
+    if (g_screenBrightnessItem) {
+        gtk_widget_set_sensitive(g_screenBrightnessItem, TRUE);
+        g_signal_handlers_block_by_func(
+            g_screenBrightnessItem,
+            reinterpret_cast<gpointer>(OnToggleScreenBrightness),
+            nullptr);
+        gtk_check_menu_item_set_active(
+            GTK_CHECK_MENU_ITEM(g_screenBrightnessItem),
+            g_app.smart.IsScreenBrightnessEnabled());
+        g_signal_handlers_unblock_by_func(
+            g_screenBrightnessItem,
+            reinterpret_cast<gpointer>(OnToggleScreenBrightness),
+            nullptr);
+    }
 }
 
 void OnAutostart(GtkMenuItem*, gpointer) {
@@ -337,38 +349,65 @@ void OnActivate(AppIndicator*, const char*, gpointer) {
     RunPlugAction(true, false, false);
 }
 
-GtkWidget* BuildMenu() {
-    GtkWidget* menu = gtk_menu_new();
-    auto add = [&](const char* label, GCallback handler) {
+void RebuildMenu() {
+    if (g_menu) {
+        gtk_widget_destroy(g_menu);
+        g_menu = nullptr;
+        g_lockOffItem = nullptr;
+        g_screenBrightnessItem = nullptr;
+        g_applyUpdateItem = nullptr;
+    }
+
+    g_menu = gtk_menu_new();
+    auto add = [&](const char* label, GCallback handler, gpointer userData = nullptr) {
         GtkWidget* item = gtk_menu_item_new_with_label(label);
-        g_signal_connect(item, "activate", handler, nullptr);
-        gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+        g_signal_connect(item, "activate", handler, userData);
+        gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), item);
         gtk_widget_show(item);
+        return item;
     };
 
-    add("Turn On", G_CALLBACK(OnTurnOn));
-    add("Turn Off", G_CALLBACK(OnTurnOff));
-    add("Smart Mode", G_CALLBACK(OnToggleSmart));
-    add("Schedule Mode", G_CALLBACK(OnToggleSchedule));
+    const auto enabledDevices = GetEnabledDevices(g_app.config);
+    if (enabledDevices.size() <= 1) {
+        add("Turn On", G_CALLBACK(OnTurnOn));
+        add("Turn Off", G_CALLBACK(OnTurnOff));
+    } else {
+        add("Turn all on", G_CALLBACK(OnTurnOn));
+        add("Turn all off", G_CALLBACK(OnTurnOff));
+        gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
+        for (size_t i = 0; i < enabledDevices.size(); ++i) {
+            const std::string label = "Toggle " + enabledDevices[i]->name;
+            add(label.c_str(), G_CALLBACK(OnToggleDevice), GINT_TO_POINTER(static_cast<int>(i)));
+        }
+    }
+
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
     g_lockOffItem = gtk_check_menu_item_new_with_label("Off when locked or sleeping");
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_lockOffItem), TRUE);
     g_signal_connect(g_lockOffItem, "toggled", G_CALLBACK(OnToggleLockOff), nullptr);
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), g_lockOffItem);
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), g_lockOffItem);
     gtk_widget_show(g_lockOffItem);
-    g_signal_connect(menu, "show", G_CALLBACK(OnMenuShow), nullptr);
+    g_screenBrightnessItem = gtk_check_menu_item_new_with_label("Adjust screen brightness");
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_screenBrightnessItem), FALSE);
+    g_signal_connect(g_screenBrightnessItem, "toggled", G_CALLBACK(OnToggleScreenBrightness), nullptr);
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), g_screenBrightnessItem);
+    gtk_widget_show(g_screenBrightnessItem);
+    g_signal_connect(g_menu, "show", G_CALLBACK(OnMenuShow), nullptr);
     add("Settings...", G_CALLBACK(OnSettings));
     add("Refresh Status", G_CALLBACK(OnRefresh));
     add("Check for updates...", G_CALLBACK(OnCheckUpdates));
     g_applyUpdateItem = gtk_menu_item_new_with_label("Update to latest...");
     gtk_widget_set_sensitive(g_applyUpdateItem, FALSE);
     g_signal_connect(g_applyUpdateItem, "activate", G_CALLBACK(OnApplyUpdate), nullptr);
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), g_applyUpdateItem);
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), g_applyUpdateItem);
     gtk_widget_show(g_applyUpdateItem);
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
     add("Install Autostart", G_CALLBACK(OnAutostart));
     add("Exit", G_CALLBACK(OnQuit));
-    gtk_widget_show_all(menu);
-    return menu;
+    gtk_widget_show_all(g_menu);
+
+    app_indicator_set_menu(g_app.indicator, GTK_MENU(g_menu));
+    UpdateApplyMenuItem();
 }
 
 }  // namespace
@@ -388,17 +427,21 @@ int main(int argc, char** argv) {
     }
 
     g_app.indicator = app_indicator_new("duskplug", "light-off", APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
-    app_indicator_set_menu(g_app.indicator, GTK_MENU(BuildMenu()));
     app_indicator_set_status(g_app.indicator, APP_INDICATOR_STATUS_ACTIVE);
     g_signal_connect(g_app.indicator, "activate", G_CALLBACK(OnActivate), nullptr);
 
     g_app.locationService = CreateLinuxLocationService();
     g_app.activityTracker = CreateLinuxActivityTracker();
+    g_app.brightnessController = CreateLinuxBrightnessController();
+
+    RebuildMenu();
 
     if (IsConfigComplete(g_app.config)) {
         g_app.client = std::make_unique<TuyaClient>(g_app.config);
         SmartModeCallbacks callbacks{};
-        callbacks.updateTray = UpdateTrayDisplay;
+        callbacks.updateTray = [](bool anyOn, size_t onCount, size_t totalCount) {
+            UpdateTrayDisplay(anyOn, onCount, totalCount);
+        };
         callbacks.showSetupMessage = ShowMessage;
         callbacks.isBusy = []() { return g_app.busy.load(); };
         g_app.smart.Initialize(
@@ -406,12 +449,16 @@ int main(int argc, char** argv) {
             g_app.client.get(),
             g_app.locationService,
             g_app.activityTracker,
+            g_app.brightnessController,
             callbacks);
         g_app.smart.LoadPersistedState();
-        if (g_app.smart.IsAutomationEnabled()) {
+        if (g_app.smart.HasAutomatedDevices()) {
             StartAutomationTimers();
             g_app.smart.Evaluate();
         } else {
+            if (g_app.smart.IsScreenBrightnessEnabled()) {
+                g_app.smart.Evaluate();
+            }
             RunPlugAction(false, false, true);
         }
         MaybeBackgroundUpdateCheck();
@@ -425,9 +472,15 @@ int main(int argc, char** argv) {
     if (g_app.pollTimer) {
         g_source_remove(g_app.pollTimer);
     }
-    ExitAutomationMode();
+    if (g_app.smartTimer) {
+        g_source_remove(g_app.smartTimer);
+    }
+    if (g_app.lockTimer) {
+        g_source_remove(g_app.lockTimer);
+    }
     g_app.smart.Shutdown();
     delete g_app.locationService;
     delete g_app.activityTracker;
+    delete g_app.brightnessController;
     return 0;
 }

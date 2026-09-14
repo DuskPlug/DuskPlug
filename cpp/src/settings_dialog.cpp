@@ -1,413 +1,461 @@
 #include "settings_dialog.h"
-#include "coords.h"
+
 #include "location_win.h"
-#include "resource.h"
-#include "schedule.h"
+#include "platform_util.h"
+#include "settings_page.h"
 
-#include <commctrl.h>
+#include <dwmapi.h>
+#include <objbase.h>
+#include <shellapi.h>
 
-#include <cstdlib>
 #include <string>
 
-#ifndef EM_SETCUEBANNER
-#define EM_SETCUEBANNER 0x1501
+#include <WebView2.h>
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+
+using CreateCoreWebView2EnvironmentWithOptionsFn = HRESULT(STDMETHODCALLTYPE*)(
+    PCWSTR browserExecutableFolder,
+    PCWSTR userDataFolder,
+    ICoreWebView2EnvironmentOptions* environmentOptions,
+    ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler* environmentCreatedHandler);
 
 namespace {
 
-struct SettingsDialogState {
-    std::wstring configPath;
-    AppConfig* config = nullptr;
+constexpr wchar_t kSettingsClass[] = L"DuskPlugSettingsHtml";
+
+class ComHandlerBase {
+public:
+    ComHandlerBase() = default;
+    virtual ~ComHandlerBase() = default;
+
+    ULONG AddRefImpl() { return static_cast<ULONG>(InterlockedIncrement(&ref_)); }
+    ULONG ReleaseImpl() {
+        const ULONG ref = static_cast<ULONG>(InterlockedDecrement(&ref_));
+        if (ref == 0) {
+            delete this;
+        }
+        return ref;
+    }
+
+private:
+    volatile LONG ref_ = 1;
 };
 
-std::wstring Utf8ToWide(const std::string& text) {
-    if (text.empty()) {
-        return {};
+HRESULT QuerySelf(REFIID riid, REFIID interfaceId, void** ppv, IUnknown* self) {
+    if (!ppv) {
+        return E_POINTER;
     }
-
-    const int size = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0);
-    if (size <= 0) {
-        return {};
+    if (riid == IID_IUnknown || riid == interfaceId) {
+        *ppv = self;
+        self->AddRef();
+        return S_OK;
     }
-
-    std::wstring wide(static_cast<size_t>(size), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), wide.data(), size);
-    return wide;
+    *ppv = nullptr;
+    return E_NOINTERFACE;
 }
 
-std::string WideToUtf8(const std::wstring& text) {
-    if (text.empty()) {
-        return {};
+struct SettingsHost {
+    HWND hwnd = nullptr;
+    std::wstring configPath;
+    AppConfig* config = nullptr;
+    std::wstring html;
+    ICoreWebView2Controller* controller = nullptr;
+    ICoreWebView2* webview = nullptr;
+    bool saved = false;
+    bool ready = false;
+    bool alive = true;
+
+    void Eval(const std::string& script);
+    void HandleMessage(const std::string& message);
+    void Resize();
+    void Close();
+};
+
+class ScriptDoneHandler : public ICoreWebView2ExecuteScriptCompletedHandler, public ComHandlerBase {
+public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        return QuerySelf(
+            riid,
+            IID_ICoreWebView2ExecuteScriptCompletedHandler,
+            ppv,
+            static_cast<ICoreWebView2ExecuteScriptCompletedHandler*>(this));
     }
+    ULONG STDMETHODCALLTYPE AddRef() override { return AddRefImpl(); }
+    ULONG STDMETHODCALLTYPE Release() override { return ReleaseImpl(); }
+    HRESULT STDMETHODCALLTYPE Invoke(HRESULT, LPCWSTR) override { return S_OK; }
+};
 
-    const int size = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
-    if (size <= 0) {
-        return {};
+class MessageHandler : public ICoreWebView2WebMessageReceivedEventHandler, public ComHandlerBase {
+public:
+    explicit MessageHandler(SettingsHost* host) : host_(host) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        return QuerySelf(
+            riid,
+            IID_ICoreWebView2WebMessageReceivedEventHandler,
+            ppv,
+            static_cast<ICoreWebView2WebMessageReceivedEventHandler*>(this));
     }
-
-    std::string utf8(static_cast<size_t>(size), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), utf8.data(), size, nullptr, nullptr);
-    return utf8;
-}
-
-std::wstring GetDlgItemTextWide(HWND dlg, int controlId) {
-    const HWND control = GetDlgItem(dlg, controlId);
-    if (!control) {
-        return {};
-    }
-
-    const int length = GetWindowTextLengthW(control);
-    if (length <= 0) {
-        return {};
-    }
-
-    std::wstring text(static_cast<size_t>(length) + 1, L'\0');
-    GetWindowTextW(control, text.data(), length + 1);
-    text.resize(length);
-    return text;
-}
-
-void SetDlgItemTextUtf8(HWND dlg, int controlId, const std::string& text) {
-    SetDlgItemTextW(dlg, controlId, Utf8ToWide(text).c_str());
-}
-
-std::string GetDlgItemTextUtf8(HWND dlg, int controlId) {
-    return WideToUtf8(GetDlgItemTextWide(dlg, controlId));
-}
-
-void MinutesToSystemTime(int minutes, SYSTEMTIME& st) {
-    GetLocalTime(&st);
-    st.wHour = static_cast<WORD>(minutes / 60);
-    st.wMinute = static_cast<WORD>(minutes % 60);
-    st.wSecond = 0;
-    st.wMilliseconds = 0;
-}
-
-int SystemTimeToMinutes(const SYSTEMTIME& st) {
-    return static_cast<int>(st.wHour) * 60 + static_cast<int>(st.wMinute);
-}
-
-bool ParseSignedInt(const std::wstring& text, int& out) {
-    if (text.empty()) {
-        return false;
-    }
-
-    wchar_t* end = nullptr;
-    const long value = wcstol(text.c_str(), &end, 10);
-    if (end == text.c_str() || (end && *end != L'\0')) {
-        return false;
-    }
-
-    out = static_cast<int>(value);
-    return true;
-}
-
-bool ParseDoubleValue(const std::wstring& text, double& out) {
-    if (text.empty()) {
-        return false;
-    }
-
-    wchar_t* end = nullptr;
-    out = wcstod(text.c_str(), &end);
-    return end != text.c_str() && (end == nullptr || *end == L'\0');
-}
-
-void SetCoordinateFields(HWND dlg, double latitude, double longitude) {
-    wchar_t buffer[64];
-    swprintf_s(buffer, L"%.6f", latitude);
-    SetDlgItemTextW(dlg, IDC_SET_LATITUDE, buffer);
-    swprintf_s(buffer, L"%.6f", longitude);
-    SetDlgItemTextW(dlg, IDC_SET_LONGITUDE, buffer);
-}
-
-bool ApplyPastedCoordinates(HWND dlg, bool showError) {
-    const std::string text = GetDlgItemTextUtf8(dlg, IDC_SET_PASTE_COORDS);
-    double latitude = 0.0;
-    double longitude = 0.0;
-    if (!ParseLatLonPair(text, latitude, longitude)) {
-        if (showError) {
-            MessageBoxW(
-                dlg,
-                L"Paste a Google Maps pair such as:\n"
-                L"51.48096831196373, -3.209212141442959\n\n"
-                L"You can also paste a Google Maps link.",
-                L"DuskPlug — Settings",
-                MB_ICONWARNING | MB_OK);
+    ULONG STDMETHODCALLTYPE AddRef() override { return AddRefImpl(); }
+    ULONG STDMETHODCALLTYPE Release() override { return ReleaseImpl(); }
+    HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) override {
+        if (!host_ || !args) {
+            return S_OK;
         }
-        return false;
-    }
-
-    SetCoordinateFields(dlg, latitude, longitude);
-    return true;
-}
-
-bool ParseCoordinatesFromDialog(HWND dlg, double& latitude, double& longitude) {
-    const std::wstring pasteText = GetDlgItemTextWide(dlg, IDC_SET_PASTE_COORDS);
-    if (!pasteText.empty() && ParseLatLonPair(WideToUtf8(pasteText), latitude, longitude)) {
-        return true;
-    }
-
-    const std::wstring latText = GetDlgItemTextWide(dlg, IDC_SET_LATITUDE);
-    if (latText.find(L',') != std::wstring::npos && ParseLatLonPair(WideToUtf8(latText), latitude, longitude)) {
-        return true;
-    }
-
-    return ParseDoubleValue(latText, latitude)
-        && ParseDoubleValue(GetDlgItemTextWide(dlg, IDC_SET_LONGITUDE), longitude);
-}
-
-void PopulateDataCenters(HWND combo) {
-    SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Central Europe (UK / most EU)"));
-    SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Western Europe"));
-    SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Western America"));
-    SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Eastern America"));
-    SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Singapore"));
-    SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"India"));
-}
-
-void LoadSettingsIntoDialog(HWND dlg, const AppConfig& config) {
-    SetDlgItemTextUtf8(dlg, IDC_SET_CLIENT_ID, config.clientId);
-    SetDlgItemTextUtf8(dlg, IDC_SET_CLIENT_SECRET, config.clientSecret);
-    SetDlgItemTextUtf8(dlg, IDC_SET_DEVICE_ID, config.deviceId);
-    SetDlgItemTextUtf8(dlg, IDC_SET_SWITCH_CODE, config.switchCode);
-
-    const HWND dataCenter = GetDlgItem(dlg, IDC_SET_DATA_CENTER);
-    if (dataCenter) {
-        SendMessageW(dataCenter, CB_SETCURSEL, BaseUrlToDataCenterIndex(config.baseUrl), 0);
-    }
-
-    wchar_t buffer[64];
-    swprintf_s(buffer, L"%.6f", config.latitude);
-    SetDlgItemTextW(dlg, IDC_SET_LATITUDE, buffer);
-    swprintf_s(buffer, L"%.6f", config.longitude);
-    SetDlgItemTextW(dlg, IDC_SET_LONGITUDE, buffer);
-    swprintf_s(buffer, L"%d", config.darkOffsetMinutes);
-    SetDlgItemTextW(dlg, IDC_SET_DARK_OFFSET, buffer);
-    swprintf_s(buffer, L"%d", config.lightOffsetMinutes);
-    SetDlgItemTextW(dlg, IDC_SET_LIGHT_OFFSET, buffer);
-    swprintf_s(buffer, L"%d", config.lockOffSeconds);
-    SetDlgItemTextW(dlg, IDC_SET_LOCK_OFF, buffer);
-
-    int onMinutes = 18 * 60;
-    int offMinutes = 23 * 60;
-    ParseTimeHHMM(config.scheduleOnTime, onMinutes);
-    ParseTimeHHMM(config.scheduleOffTime, offMinutes);
-
-    SYSTEMTIME onTime{};
-    SYSTEMTIME offTime{};
-    MinutesToSystemTime(onMinutes, onTime);
-    MinutesToSystemTime(offMinutes, offTime);
-    SendDlgItemMessageW(dlg, IDC_SET_ON_TIME, DTM_SETFORMAT, 0, reinterpret_cast<LPARAM>(L"HH:mm"));
-    SendDlgItemMessageW(dlg, IDC_SET_OFF_TIME, DTM_SETFORMAT, 0, reinterpret_cast<LPARAM>(L"HH:mm"));
-    SendDlgItemMessageW(dlg, IDC_SET_ON_TIME, DTM_SETSYSTEMTIME, GDT_VALID, reinterpret_cast<LPARAM>(&onTime));
-    SendDlgItemMessageW(dlg, IDC_SET_OFF_TIME, DTM_SETSYSTEMTIME, GDT_VALID, reinterpret_cast<LPARAM>(&offTime));
-}
-
-bool CollectSettingsFromDialog(HWND dlg, AppConfig& config) {
-    config.clientId = GetDlgItemTextUtf8(dlg, IDC_SET_CLIENT_ID);
-    config.clientSecret = GetDlgItemTextUtf8(dlg, IDC_SET_CLIENT_SECRET);
-    config.deviceId = GetDlgItemTextUtf8(dlg, IDC_SET_DEVICE_ID);
-    config.switchCode = GetDlgItemTextUtf8(dlg, IDC_SET_SWITCH_CODE);
-    if (config.switchCode.empty()) {
-        config.switchCode = "switch_1";
-    }
-
-    if (config.clientId.empty() || config.clientSecret.empty() || config.deviceId.empty()) {
-        MessageBoxW(
-            dlg,
-            L"Access ID, Access Secret, and Device ID are required.",
-            L"DuskPlug — Settings",
-            MB_ICONWARNING | MB_OK);
-        return false;
-    }
-
-    const HWND dataCenter = GetDlgItem(dlg, IDC_SET_DATA_CENTER);
-    const int centerIndex = static_cast<int>(SendMessageW(dataCenter, CB_GETCURSEL, 0, 0));
-    config.baseUrl = DataCenterIndexToBaseUrl(centerIndex < 0 ? 0 : centerIndex);
-
-    double latitude = 0.0;
-    double longitude = 0.0;
-    if (!ParseCoordinatesFromDialog(dlg, latitude, longitude)) {
-        MessageBoxW(
-            dlg,
-            L"Enter valid latitude and longitude, paste a Google Maps pair, or use Detect Location.",
-            L"DuskPlug — Settings",
-            MB_ICONWARNING | MB_OK);
-        return false;
-    }
-
-    config.latitude = latitude;
-    config.longitude = longitude;
-    config.hasLatitude = true;
-    config.hasLongitude = true;
-
-    if (!ParseSignedInt(GetDlgItemTextWide(dlg, IDC_SET_DARK_OFFSET), config.darkOffsetMinutes)
-        || !ParseSignedInt(GetDlgItemTextWide(dlg, IDC_SET_LIGHT_OFFSET), config.lightOffsetMinutes)
-        || !ParseSignedInt(GetDlgItemTextWide(dlg, IDC_SET_LOCK_OFF), config.lockOffSeconds)) {
-        MessageBoxW(
-            dlg,
-            L"Offset and lock-off values must be whole numbers.",
-            L"DuskPlug — Settings",
-            MB_ICONWARNING | MB_OK);
-        return false;
-    }
-
-    if (config.lockOffSeconds < 0) {
-        MessageBoxW(dlg, L"Lock-off seconds cannot be negative.", L"DuskPlug — Settings", MB_ICONWARNING | MB_OK);
-        return false;
-    }
-
-    SYSTEMTIME onTime{};
-    SYSTEMTIME offTime{};
-    if (SendDlgItemMessageW(dlg, IDC_SET_ON_TIME, DTM_GETSYSTEMTIME, 0, reinterpret_cast<LPARAM>(&onTime)) != GDT_VALID
-        || SendDlgItemMessageW(dlg, IDC_SET_OFF_TIME, DTM_GETSYSTEMTIME, 0, reinterpret_cast<LPARAM>(&offTime)) != GDT_VALID) {
-        MessageBoxW(dlg, L"Please choose valid ON and OFF times.", L"DuskPlug — Settings", MB_ICONWARNING | MB_OK);
-        return false;
-    }
-
-    const int onMinutes = SystemTimeToMinutes(onTime);
-    const int offMinutes = SystemTimeToMinutes(offTime);
-    if (onMinutes == offMinutes) {
-        MessageBoxW(
-            dlg,
-            L"ON and OFF times cannot be the same.\n\n"
-            L"Pick two different times, or use overnight spans like 22:00 to 06:00.",
-            L"DuskPlug — Settings",
-            MB_ICONWARNING | MB_OK);
-        return false;
-    }
-
-    if (!FormatTimeHHMM(onMinutes, config.scheduleOnTime) || !FormatTimeHHMM(offMinutes, config.scheduleOffTime)) {
-        MessageBoxW(dlg, L"Could not read the schedule times.", L"DuskPlug — Settings", MB_ICONERROR | MB_OK);
-        return false;
-    }
-    config.hasScheduleTimes = true;
-    return true;
-}
-
-INT_PTR CALLBACK SettingsDialogProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    auto* state = reinterpret_cast<SettingsDialogState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
-
-    switch (msg) {
-    case WM_INITDIALOG: {
-        state = reinterpret_cast<SettingsDialogState*>(lParam);
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
-
-        INITCOMMONCONTROLSEX icc{};
-        icc.dwSize = sizeof(icc);
-        icc.dwICC = ICC_DATE_CLASSES;
-        InitCommonControlsEx(&icc);
-
-        const HWND dataCenter = GetDlgItem(hwnd, IDC_SET_DATA_CENTER);
-        if (dataCenter) {
-            PopulateDataCenters(dataCenter);
+        LPWSTR message = nullptr;
+        if (FAILED(args->TryGetWebMessageAsString(&message)) || !message) {
+            return S_OK;
         }
-
-        if (state && state->config) {
-            LoadSettingsIntoDialog(hwnd, *state->config);
-        }
-
-        const HWND pasteCoords = GetDlgItem(hwnd, IDC_SET_PASTE_COORDS);
-        if (pasteCoords) {
-            SendMessageW(
-                pasteCoords,
-                EM_SETCUEBANNER,
-                TRUE,
-                reinterpret_cast<LPARAM>(L"51.4809, -3.2092"));
-        }
-        return TRUE;
+        const std::string utf8 = WideToUtf8(message);
+        CoTaskMemFree(message);
+        host_->HandleMessage(utf8);
+        return S_OK;
     }
 
-    case WM_COMMAND:
-        switch (LOWORD(wParam)) {
-        case IDC_SET_DETECT_LOCATION: {
-            double latitude = 0.0;
-            double longitude = 0.0;
-            if (!RequestWindowsLocation(hwnd, latitude, longitude)) {
-                const int choice = MessageBoxW(
-                    hwnd,
-                    L"Windows did not provide a location.\n\n"
-                    L"Check Settings → Privacy → Location:\n"
-                    L"• Location services = On\n"
-                    L"• Let desktop apps access your location = On\n\n"
-                    L"Open Location settings now?",
-                    L"DuskPlug — Settings",
-                    MB_YESNO | MB_ICONWARNING);
-                if (choice == IDYES) {
-                    OpenWindowsLocationSettings();
-                }
-                return TRUE;
-            }
+private:
+    SettingsHost* host_ = nullptr;
+};
 
-            SetCoordinateFields(hwnd, latitude, longitude);
-            return TRUE;
-        }
-        case IDC_SET_APPLY_COORDS:
-            ApplyPastedCoordinates(hwnd, true);
-            return TRUE;
-        case IDC_SET_PASTE_COORDS:
-            if (HIWORD(wParam) == EN_CHANGE) {
-                ApplyPastedCoordinates(hwnd, false);
-            }
-            return TRUE;
-        case IDC_SET_LATITUDE:
-            if (HIWORD(wParam) == EN_CHANGE) {
-                const std::wstring latText = GetDlgItemTextWide(hwnd, IDC_SET_LATITUDE);
-                double latitude = 0.0;
-                double longitude = 0.0;
-                if (latText.find(L',') != std::wstring::npos
-                    && ParseLatLonPair(WideToUtf8(latText), latitude, longitude)) {
-                    SetCoordinateFields(hwnd, latitude, longitude);
-                }
-            }
-            return TRUE;
-        case IDOK: {
-            if (!state || !state->config) {
-                EndDialog(hwnd, IDCANCEL);
-                return TRUE;
-            }
+class ControllerReadyHandler : public ICoreWebView2CreateCoreWebView2ControllerCompletedHandler, public ComHandlerBase {
+public:
+    explicit ControllerReadyHandler(SettingsHost* host) : host_(host) {}
 
-            AppConfig updated = *state->config;
-            if (!CollectSettingsFromDialog(hwnd, updated)) {
-                return TRUE;
-            }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        return QuerySelf(
+            riid,
+            IID_ICoreWebView2CreateCoreWebView2ControllerCompletedHandler,
+            ppv,
+            static_cast<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler*>(this));
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return AddRefImpl(); }
+    ULONG STDMETHODCALLTYPE Release() override { return ReleaseImpl(); }
+    HRESULT STDMETHODCALLTYPE Invoke(HRESULT errorCode, ICoreWebView2Controller* controller) override;
 
-            if (!SaveAppConfig(state->configPath, updated)) {
+private:
+    SettingsHost* host_ = nullptr;
+};
+
+class EnvironmentReadyHandler : public ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler, public ComHandlerBase {
+public:
+    explicit EnvironmentReadyHandler(SettingsHost* host) : host_(host) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        return QuerySelf(
+            riid,
+            IID_ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler,
+            ppv,
+            static_cast<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler*>(this));
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return AddRefImpl(); }
+    ULONG STDMETHODCALLTYPE Release() override { return ReleaseImpl(); }
+    HRESULT STDMETHODCALLTYPE Invoke(HRESULT errorCode, ICoreWebView2Environment* env) override {
+        if (!host_ || FAILED(errorCode) || !env || !host_->hwnd) {
+            if (host_ && host_->hwnd) {
                 MessageBoxW(
-                    hwnd,
-                    L"Could not save your settings.",
+                    host_->hwnd,
+                    L"Could not start the settings page (WebView2 environment failed).",
                     L"DuskPlug — Settings",
                     MB_ICONERROR | MB_OK);
-                return TRUE;
+                DestroyWindow(host_->hwnd);
             }
-
-            *state->config = updated;
-            EndDialog(hwnd, IDOK);
-            return TRUE;
+            return S_OK;
         }
-        case IDCANCEL:
-            EndDialog(hwnd, IDCANCEL);
-            return TRUE;
+        env->CreateCoreWebView2Controller(host_->hwnd, new ControllerReadyHandler(host_));
+        return S_OK;
+    }
+
+private:
+    SettingsHost* host_ = nullptr;
+};
+
+void SettingsHost::Eval(const std::string& script) {
+    if (!webview || script.empty()) {
+        return;
+    }
+    webview->ExecuteScript(Utf8ToWide(script).c_str(), new ScriptDoneHandler());
+}
+
+void SettingsHost::HandleMessage(const std::string& message) {
+    if (!config) {
+        return;
+    }
+    const SettingsWebResult result = HandleSettingsWebMessage(message, WideToUtf8(configPath), *config);
+    switch (result.kind) {
+    case SettingsWebResult::Kind::Saved:
+        saved = true;
+        Close();
+        break;
+    case SettingsWebResult::Kind::Cancel:
+        Close();
+        break;
+    case SettingsWebResult::Kind::DetectLocation: {
+        double latitude = 0.0;
+        double longitude = 0.0;
+        if (RequestWindowsLocation(hwnd, latitude, longitude)) {
+            Eval(JsCallSetLocation(latitude, longitude));
+        } else {
+            Eval(JsCallShowError(
+                "Windows did not provide a location. Turn on Location services and allow desktop apps, then try again.",
+                true));
         }
         break;
     }
+    case SettingsWebResult::Kind::OpenLocationSettings:
+        OpenWindowsLocationSettings();
+        break;
+    case SettingsWebResult::Kind::SetLocation:
+        Eval(JsCallSetLocation(result.latitude, result.longitude));
+        break;
+    case SettingsWebResult::Kind::RunScript:
+        Eval(result.script);
+        break;
+    case SettingsWebResult::Kind::None:
+    default:
+        break;
+    }
+}
 
-    return FALSE;
+void SettingsHost::Resize() {
+    if (!controller || !hwnd) {
+        return;
+    }
+    RECT bounds{};
+    GetClientRect(hwnd, &bounds);
+    controller->put_Bounds(bounds);
+}
+
+void SettingsHost::Close() {
+    if (hwnd) {
+        DestroyWindow(hwnd);
+    }
+}
+
+HRESULT ControllerReadyHandler::Invoke(HRESULT errorCode, ICoreWebView2Controller* controller) {
+    if (!host_ || FAILED(errorCode) || !controller) {
+        if (host_ && host_->hwnd) {
+            MessageBoxW(
+                host_->hwnd,
+                L"Could not create the settings page view.",
+                L"DuskPlug — Settings",
+                MB_ICONERROR | MB_OK);
+            DestroyWindow(host_->hwnd);
+        }
+        return S_OK;
+    }
+
+    host_->controller = controller;
+    host_->controller->AddRef();
+    host_->controller->get_CoreWebView2(&host_->webview);
+    if (!host_->webview) {
+        DestroyWindow(host_->hwnd);
+        return S_OK;
+    }
+
+    ICoreWebView2Settings* settings = nullptr;
+    if (SUCCEEDED(host_->webview->get_Settings(&settings)) && settings) {
+        settings->put_AreDefaultContextMenusEnabled(FALSE);
+        settings->put_AreDevToolsEnabled(FALSE);
+        settings->put_IsStatusBarEnabled(FALSE);
+        settings->Release();
+    }
+
+    ICoreWebView2Controller2* controller2 = nullptr;
+    if (SUCCEEDED(host_->controller->QueryInterface(IID_ICoreWebView2Controller2, reinterpret_cast<void**>(&controller2)))
+        && controller2) {
+        COREWEBVIEW2_COLOR color{255, 12, 16, 24};
+        controller2->put_DefaultBackgroundColor(color);
+        controller2->Release();
+    }
+
+    EventRegistrationToken token{};
+    auto* messageHandler = new MessageHandler(host_);
+    host_->webview->add_WebMessageReceived(messageHandler, &token);
+    messageHandler->Release();
+    host_->Resize();
+    host_->controller->put_IsVisible(TRUE);
+    host_->webview->NavigateToString(host_->html.c_str());
+    host_->ready = true;
+    return S_OK;
+}
+
+void ApplyDarkTitleBar(HWND hwnd) {
+    BOOL value = TRUE;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+}
+
+void ShowWebView2InstallPrompt(HWND owner) {
+    const int choice = MessageBoxW(
+        owner,
+        L"DuskPlug Settings needs the Microsoft Edge WebView2 Runtime.\n\n"
+        L"Open the download page now?",
+        L"DuskPlug — Settings",
+        MB_YESNO | MB_ICONWARNING);
+    if (choice == IDYES) {
+        ShellExecuteW(owner, L"open", L"https://go.microsoft.com/fwlink/p/?LinkId=2124703", nullptr, nullptr, SW_SHOWNORMAL);
+    }
+}
+
+HMODULE LoadWebView2Loader() {
+    HMODULE module = LoadLibraryW(L"WebView2Loader.dll");
+    if (module) {
+        return module;
+    }
+    const std::wstring path = Utf8ToWide(GetExeDirectory()) + L"\\WebView2Loader.dll";
+    return LoadLibraryW(path.c_str());
+}
+
+LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    auto* host = reinterpret_cast<SettingsHost*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    switch (msg) {
+    case WM_NCCREATE: {
+        auto* create = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        host = reinterpret_cast<SettingsHost*>(create->lpCreateParams);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(host));
+        if (host) {
+            host->hwnd = hwnd;
+        }
+        break;
+    }
+    case WM_SIZE:
+        if (host) {
+            host->Resize();
+        }
+        return 0;
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
+    case WM_DESTROY:
+        if (host) {
+            if (host->controller) {
+                host->controller->Close();
+                host->controller->Release();
+                host->controller = nullptr;
+            }
+            if (host->webview) {
+                host->webview->Release();
+                host->webview = nullptr;
+            }
+            host->hwnd = nullptr;
+            host->alive = false;
+        }
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 }  // namespace
 
 bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& config) {
-    SettingsDialogState state{};
-    state.configPath = configPath;
-    state.config = &config;
+    const std::string htmlUtf8 = LoadSettingsHtml();
+    if (htmlUtf8.empty()) {
+        MessageBoxW(
+            owner,
+            L"Could not find assets\\settings.html next to DuskPlug.exe.",
+            L"DuskPlug — Settings",
+            MB_ICONERROR | MB_OK);
+        return false;
+    }
 
-    const INT_PTR result = DialogBoxParamW(
-        GetModuleHandleW(nullptr),
-        MAKEINTRESOURCEW(IDD_SETTINGS),
+    const HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    const bool uninitCom = SUCCEEDED(comHr);
+
+    HMODULE loader = LoadWebView2Loader();
+    if (!loader) {
+        ShowWebView2InstallPrompt(owner);
+        if (uninitCom) {
+            CoUninitialize();
+        }
+        return false;
+    }
+
+    auto createEnv = reinterpret_cast<CreateCoreWebView2EnvironmentWithOptionsFn>(
+        GetProcAddress(loader, "CreateCoreWebView2EnvironmentWithOptions"));
+    if (!createEnv) {
+        ShowWebView2InstallPrompt(owner);
+        FreeLibrary(loader);
+        if (uninitCom) {
+            CoUninitialize();
+        }
+        return false;
+    }
+
+    SettingsHost host{};
+    host.configPath = configPath;
+    host.config = &config;
+    host.html = Utf8ToWide(InjectSettingsBoot(htmlUtf8, BuildSettingsBootJson(config, "windows")));
+
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+    WNDCLASSEXW wc{};
+    wc.cbSize = sizeof(wc);
+    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc = SettingsWndProc;
+    wc.hInstance = instance;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(1));
+    wc.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    wc.lpszClassName = kSettingsClass;
+    RegisterClassExW(&wc);
+
+    const int width = 820;
+    const int height = 940;
+    const int x = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
+    const int y = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
+
+    HWND hwnd = CreateWindowExW(
+        0,
+        kSettingsClass,
+        L"DuskPlug Settings",
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
+        x,
+        y,
+        width,
+        height,
         owner,
-        SettingsDialogProc,
-        reinterpret_cast<LPARAM>(&state));
+        nullptr,
+        instance,
+        &host);
+    if (!hwnd) {
+        FreeLibrary(loader);
+        if (uninitCom) {
+            CoUninitialize();
+        }
+        return false;
+    }
 
-    return result == IDOK;
+    ApplyDarkTitleBar(hwnd);
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
+
+    const std::wstring userData = Utf8ToWide(GetAppDataDir() + "\\WebView2");
+    EnsureDirectoryExists(WideToUtf8(userData));
+    const HRESULT envHr = createEnv(nullptr, userData.c_str(), nullptr, new EnvironmentReadyHandler(&host));
+    if (FAILED(envHr)) {
+        ShowWebView2InstallPrompt(hwnd);
+        DestroyWindow(hwnd);
+        MSG msg{};
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        FreeLibrary(loader);
+        if (uninitCom) {
+            CoUninitialize();
+        }
+        return false;
+    }
+
+    MSG msg{};
+    while (host.alive && GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    FreeLibrary(loader);
+    if (uninitCom) {
+        CoUninitialize();
+    }
+    return host.saved;
 }

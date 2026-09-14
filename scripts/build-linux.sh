@@ -11,6 +11,7 @@ sudo apt-get install -y \
   libcurl4-openssl-dev \
   libgtk-3-dev libayatana-appindicator3-dev \
   libgeoclue-2-dev libsystemd-dev
+sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
 cmake -S "$ROOT/cpp" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$BUILD_DIR" --target duskplug duskplug_tests

@@ -1,6 +1,7 @@
 #include "json_util.h"
 
 #include <cctype>
+#include <vector>
 
 static void SkipJsonWhitespace(const std::string& json, size_t& pos) {
     while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos]))) {
@@ -212,6 +213,85 @@ std::optional<std::string> JsonGetNestedString(const std::string& json, const st
 
     const std::string slice = json.substr(start, pos - start + 1);
     return JsonGetString(slice, childKey);
+}
+
+std::vector<std::string> JsonGetArrayObjectSlices(const std::string& json, const std::string& key) {
+    std::vector<std::string> items;
+    const auto keyPos = FindJsonKey(json, key);
+    if (!keyPos) {
+        return items;
+    }
+
+    size_t pos = *keyPos + key.size() + 2;
+    SkipJsonWhitespace(json, pos);
+    if (pos >= json.size() || json[pos] != ':') {
+        return items;
+    }
+    ++pos;
+    SkipJsonWhitespace(json, pos);
+    if (pos >= json.size() || json[pos] != '[') {
+        return items;
+    }
+    ++pos;
+    SkipJsonWhitespace(json, pos);
+
+    while (pos < json.size() && json[pos] != ']') {
+        SkipJsonWhitespace(json, pos);
+        if (pos >= json.size() || json[pos] == ']') {
+            break;
+        }
+        if (json[pos] != '{') {
+            break;
+        }
+
+        size_t depth = 0;
+        const size_t start = pos;
+        for (; pos < json.size(); ++pos) {
+            if (json[pos] == '{') {
+                ++depth;
+            } else if (json[pos] == '}') {
+                --depth;
+                if (depth == 0) {
+                    break;
+                }
+            }
+        }
+        if (pos >= json.size()) {
+            break;
+        }
+
+        items.push_back(json.substr(start, pos - start + 1));
+        ++pos;
+        SkipJsonWhitespace(json, pos);
+        if (pos < json.size() && json[pos] == ',') {
+            ++pos;
+        }
+    }
+
+    return items;
+}
+
+bool JsonStatusIntForCode(const std::string& json, const std::string& code, int& out) {
+    const std::string quoted = "\"code\"";
+    size_t pos = 0;
+    while ((pos = json.find(quoted, pos)) != std::string::npos) {
+        size_t after = pos + quoted.size();
+        SkipJsonWhitespace(json, after);
+        if (after < json.size() && json[after] == ':') {
+            ++after;
+            SkipJsonWhitespace(json, after);
+            auto value = ReadJsonString(json, after);
+            if (value && *value == code) {
+                const std::string tail = json.substr(after, 120);
+                if (const auto number = JsonGetNumber(tail, "value")) {
+                    out = static_cast<int>(*number);
+                    return true;
+                }
+            }
+        }
+        ++pos;
+    }
+    return false;
 }
 
 bool JsonStatusValueForCode(const std::string& json, const std::string& code, bool& out) {

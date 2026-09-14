@@ -29,6 +29,134 @@ function Get-SmartConfigPath {
     return $appDataConfig
 }
 
+function Get-SmartConfigDevices {
+    param(
+        [Parameter(Mandatory)]
+        $Config
+    )
+
+    if ($Config.Devices -and @($Config.Devices).Count -gt 0) {
+        return @($Config.Devices)
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Config.DeviceId)) {
+        return @()
+    }
+
+    $switchCode = if ([string]::IsNullOrWhiteSpace($Config.SwitchCode)) { 'switch_1' } else { $Config.SwitchCode }
+    return @([pscustomobject]@{
+            Id           = $Config.DeviceId
+            Name         = 'Device'
+            Type         = 'plug'
+            Enabled      = $true
+            Capabilities = [pscustomobject]@{
+                switch = $switchCode
+            }
+            Automation   = [pscustomobject]@{
+                mode             = 'manual'
+                scheduleOnTime   = if ($Config.ScheduleOnTime) { $Config.ScheduleOnTime } else { '18:00' }
+                scheduleOffTime  = if ($Config.ScheduleOffTime) { $Config.ScheduleOffTime } else { '23:00' }
+            }
+        })
+}
+
+function Resolve-TuyaDevice {
+    param(
+        [Parameter(Mandatory)]
+        $Config,
+
+        [string]$DeviceId
+    )
+
+    $devices = Get-SmartConfigDevices -Config $Config
+    if ($devices.Count -eq 0) {
+        throw 'Config has no devices. Add at least one device in Settings or run Setup.ps1.'
+    }
+
+    if ($DeviceId) {
+        $match = $devices | Where-Object { $_.Id -eq $DeviceId } | Select-Object -First 1
+        if (-not $match) {
+            throw "Device '$DeviceId' not found in config."
+        }
+        return $match
+    }
+
+    $enabled = $devices | Where-Object { $_.Enabled -ne $false } | Select-Object -First 1
+    if ($enabled) {
+        return $enabled
+    }
+
+    return $devices | Select-Object -First 1
+}
+
+function Get-TuyaDeviceSwitchCode {
+    param(
+        [Parameter(Mandatory)]
+        $Device
+    )
+
+    if ($Device.Capabilities -and -not [string]::IsNullOrWhiteSpace($Device.Capabilities.switch)) {
+        return $Device.Capabilities.switch
+    }
+
+    return 'switch_1'
+}
+
+function Get-TuyaSuggestedDeviceType {
+    param(
+        [Parameter(Mandatory)]
+        $Functions,
+
+        [string]$SwitchCode = 'switch_1'
+    )
+
+    if ($Functions | Where-Object { $_.code -like 'bright_value*' }) {
+        return 'bulb'
+    }
+
+    if ($SwitchCode -like '*switch_led*') {
+        return 'bulb'
+    }
+
+    return 'plug'
+}
+
+function Get-TuyaDiscoveredCapabilities {
+    param(
+        [Parameter(Mandatory)]
+        $Functions
+    )
+
+    $switchFunctions = $Functions | Where-Object { $_.type -eq 'Boolean' -or $_.code -like 'switch*' }
+    $switchCode = if ($switchFunctions) { ($switchFunctions | Select-Object -First 1).code } else { 'switch_1' }
+    $brightness = $Functions | Where-Object { $_.code -like 'bright_value*' } | Select-Object -First 1
+    $deviceType = Get-TuyaSuggestedDeviceType -Functions $Functions -SwitchCode $switchCode
+
+    $capabilities = [ordered]@{
+        switch = $switchCode
+    }
+
+    if ($brightness) {
+        $capabilities.brightness = $brightness.code
+        $capabilities.brightnessMin = 10
+        $capabilities.brightnessMax = 1000
+        if ($brightness.values) {
+            $range = $brightness.values | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if ($range.min) { $capabilities.brightnessMin = [int]$range.min }
+            if ($range.max) { $capabilities.brightnessMax = [int]$range.max }
+            if ($range.scale -and $range.min -eq $null -and $range.max) {
+                $capabilities.brightnessMax = [int]$range.max
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Type           = $deviceType
+        SwitchCode     = $switchCode
+        Capabilities   = $capabilities
+    }
+}
+
 function Get-TuyaConfig {
     param(
         [string]$ConfigPath = (Get-SmartConfigPath)
@@ -40,14 +168,25 @@ function Get-TuyaConfig {
 
     $config = Get-Content -Path $ConfigPath -Raw | ConvertFrom-Json
 
-    foreach ($key in @('ClientId', 'ClientSecret', 'DeviceId', 'BaseUrl')) {
+    foreach ($key in @('ClientId', 'ClientSecret', 'BaseUrl')) {
         if ([string]::IsNullOrWhiteSpace($config.$key)) {
             throw "Config is missing required value: $key"
         }
     }
 
+    $devices = Get-SmartConfigDevices -Config $config
+    if ($devices.Count -eq 0) {
+        throw 'Config is missing required value: at least one device (Devices[] or legacy DeviceId)'
+    }
+
     if ([string]::IsNullOrWhiteSpace($config.SwitchCode)) {
-        $config | Add-Member -NotePropertyName SwitchCode -NotePropertyValue 'switch_1' -Force
+        $primary = Resolve-TuyaDevice -Config $config
+        $config | Add-Member -NotePropertyName SwitchCode -NotePropertyValue (Get-TuyaDeviceSwitchCode -Device $primary) -Force
+    }
+
+    if ([string]::IsNullOrWhiteSpace($config.DeviceId)) {
+        $primary = Resolve-TuyaDevice -Config $config
+        $config | Add-Member -NotePropertyName DeviceId -NotePropertyValue $primary.Id -Force
     }
 
     return $config
@@ -101,7 +240,7 @@ function Save-SmartConfig {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
 
-    ($config | ConvertTo-Json -Depth 5) | Set-Content -Path $ConfigPath -Encoding UTF8
+    ($config | ConvertTo-Json -Depth 10) | Set-Content -Path $ConfigPath -Encoding UTF8
     return $ConfigPath
 }
 
@@ -216,10 +355,13 @@ function Get-TuyaDeviceFunctions {
         $Config,
 
         [Parameter(Mandatory)]
-        [string]$AccessToken
+        [string]$AccessToken,
+
+        [string]$DeviceId
     )
 
-    $path = "/v1.0/devices/$($Config.DeviceId)/functions"
+    $device = Resolve-TuyaDevice -Config $Config -DeviceId $DeviceId
+    $path = "/v1.0/devices/$($device.Id)/functions"
     $response = Invoke-TuyaApi -BaseUrl $Config.BaseUrl -ClientId $Config.ClientId -ClientSecret $Config.ClientSecret -Method GET -Path $path -AccessToken $AccessToken
 
     if (-not $response.success) {
@@ -237,10 +379,13 @@ function Get-TuyaDeviceStatus {
         $Config,
 
         [Parameter(Mandatory)]
-        [string]$AccessToken
+        [string]$AccessToken,
+
+        [string]$DeviceId
     )
 
-    $path = "/v1.0/devices/$($Config.DeviceId)/status"
+    $device = Resolve-TuyaDevice -Config $Config -DeviceId $DeviceId
+    $path = "/v1.0/devices/$($device.Id)/status"
     $response = Invoke-TuyaApi -BaseUrl $Config.BaseUrl -ClientId $Config.ClientId -ClientSecret $Config.ClientSecret -Method GET -Path $path -AccessToken $AccessToken
 
     if (-not $response.success) {
@@ -261,19 +406,23 @@ function Set-TuyaDeviceSwitch {
         [string]$AccessToken,
 
         [Parameter(Mandatory)]
-        [bool]$On
+        [bool]$On,
+
+        [string]$DeviceId
     )
 
+    $device = Resolve-TuyaDevice -Config $Config -DeviceId $DeviceId
+    $switchCode = Get-TuyaDeviceSwitchCode -Device $device
     $bodyObj = @{
         commands = @(
             @{
-                code  = $Config.SwitchCode
+                code  = $switchCode
                 value = $On
             }
         )
     }
     $body = ($bodyObj | ConvertTo-Json -Compress -Depth 5)
-    $path = "/v1.0/devices/$($Config.DeviceId)/commands"
+    $path = "/v1.0/devices/$($device.Id)/commands"
     $response = Invoke-TuyaApi -BaseUrl $Config.BaseUrl -ClientId $Config.ClientId -ClientSecret $Config.ClientSecret -Method POST -Path $path -AccessToken $AccessToken -Body $body
 
     if (-not $response.success) {
@@ -291,15 +440,19 @@ function Get-TuyaSwitchState {
         $Config,
 
         [Parameter(Mandatory)]
-        [string]$AccessToken
+        [string]$AccessToken,
+
+        [string]$DeviceId
     )
 
-    $status = Get-TuyaDeviceStatus -Config $Config -AccessToken $AccessToken
-    $switch = $status | Where-Object { $_.code -eq $Config.SwitchCode } | Select-Object -First 1
+    $device = Resolve-TuyaDevice -Config $Config -DeviceId $DeviceId
+    $switchCode = Get-TuyaDeviceSwitchCode -Device $device
+    $status = Get-TuyaDeviceStatus -Config $Config -AccessToken $AccessToken -DeviceId $device.Id
+    $switch = $status | Where-Object { $_.code -eq $switchCode } | Select-Object -First 1
 
     if (-not $switch) {
         $available = ($status | ForEach-Object { $_.code }) -join ', '
-        throw "Switch code '$($Config.SwitchCode)' not found in device status. Available codes: $available"
+        throw "Switch code '$switchCode' not found in device status. Available codes: $available"
     }
 
     return [bool]$switch.value
@@ -311,7 +464,9 @@ function Invoke-TuyaPlugAction {
         [ValidateSet('On', 'Off', 'Status', 'Toggle')]
         [string]$Action,
 
-        [string]$ConfigPath
+        [string]$ConfigPath,
+
+        [string]$DeviceId
     )
 
     $params = @{}
@@ -321,26 +476,32 @@ function Invoke-TuyaPlugAction {
 
     $config = Get-TuyaConfig @params
     $token = Get-TuyaAccessToken -Config $config
+    $device = Resolve-TuyaDevice -Config $config -DeviceId $DeviceId
+    $deviceParams = @{
+        Config      = $config
+        AccessToken = $token
+        DeviceId    = $device.Id
+    }
 
     switch ($Action) {
         'On' {
-            Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $true | Out-Null
+            Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $true -DeviceId $device.Id | Out-Null
             return 'on'
         }
         'Off' {
-            Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $false | Out-Null
+            Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $false -DeviceId $device.Id | Out-Null
             return 'off'
         }
         'Status' {
-            if (Get-TuyaSwitchState -Config $config -AccessToken $token) {
+            if (Get-TuyaSwitchState @deviceParams) {
                 return 'on'
             }
             return 'off'
         }
         'Toggle' {
-            $current = Get-TuyaSwitchState -Config $config -AccessToken $token
+            $current = Get-TuyaSwitchState @deviceParams
             $next = -not $current
-            Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $next | Out-Null
+            Set-TuyaDeviceSwitch -Config $config -AccessToken $token -On $next -DeviceId $device.Id | Out-Null
             if ($next) {
                 return 'on'
             }

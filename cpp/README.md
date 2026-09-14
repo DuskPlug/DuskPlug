@@ -21,7 +21,8 @@ Dependencies (Debian/Ubuntu):
 
 ```bash
 sudo apt install build-essential cmake pkg-config libcurl4-openssl-dev \
-  libgtk-3-dev libayatana-appindicator3-dev libgeoclue-2-dev libsystemd-dev
+  libgtk-3-dev libayatana-appindicator3-dev libgeoclue-2-dev libsystemd-dev \
+  libwebkit2gtk-4.1-dev
 cmake -S cpp -B cpp/build && cmake --build cpp/build --target duskplug
 ```
 
@@ -39,9 +40,9 @@ cmake -S cpp -B cpp/build && cmake --build cpp/build --target DuskPlug
 | `src/config.cpp`, `tuya_client.cpp`, `smart_mode.cpp`, … | Portable UTF-8 core |
 | `src/platform_util.cpp` | Paths, file I/O, time, random |
 | `src/http_win.cpp` / `src/http_curl.cpp` | Platform HTTP |
-| `src/main.cpp` + Win32 UI | Windows tray app (unchanged UX) |
-| `src/linux/` | GTK3 + Ayatana AppIndicator |
-| `src/macos/` | Cocoa menu bar app |
+| `src/main.cpp` + HTML settings | Windows tray app + WebView2 settings |
+| `src/linux/` | GTK3 + Ayatana AppIndicator + WebKitGTK settings |
+| `src/macos/` | Cocoa menu bar app + WKWebView settings |
 
 ## Behaviour
 
@@ -58,6 +59,7 @@ cmake -S cpp -B cpp/build && cmake --build cpp/build --target DuskPlug
 - **Linux:** GeoClue 2
 - **macOS:** Core Location
 - Lock-screen auto-off and sleep countdown-off on all platforms (toggle from tray menu: **Off when locked or sleeping**)
+- Optional screen brightness (toggle from tray menu: **Adjust screen brightness**): sets night/day backlight levels on controllable displays while Smart or Schedule Mode is active; restores previous brightness when disabled or when leaving automation
 
 ### Schedule Mode
 

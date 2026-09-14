@@ -110,10 +110,11 @@ SolarTimes ComputeSolarTimes(
     return result;
 }
 
-bool IsDark(
+bool IsDarkWithOffsets(
     double latitude,
     double longitude,
-    const AppConfig& config,
+    int darkOffsetMinutes,
+    int lightOffsetMinutes,
     SolarTimes* outTimes) {
     const LocalDateTime now = GetLocalDateTime();
 
@@ -129,12 +130,25 @@ bool IsDark(
     }
 
     const int nowMinutes = now.hour * 60 + now.minute;
-    const int darkStart = times.sunsetMinutes + config.darkOffsetMinutes;
-    const int lightStart = times.sunriseMinutes - config.lightOffsetMinutes;
+    const int darkStart = times.sunsetMinutes + darkOffsetMinutes;
+    const int lightStart = times.sunriseMinutes - lightOffsetMinutes;
 
     if (lightStart <= darkStart) {
         return nowMinutes >= darkStart || nowMinutes < lightStart;
     }
 
     return nowMinutes >= darkStart && nowMinutes < lightStart;
+}
+
+bool IsDark(
+    double latitude,
+    double longitude,
+    const AppConfig& config,
+    SolarTimes* outTimes) {
+    return IsDarkWithOffsets(
+        latitude,
+        longitude,
+        config.darkOffsetMinutes,
+        config.lightOffsetMinutes,
+        outTimes);
 }

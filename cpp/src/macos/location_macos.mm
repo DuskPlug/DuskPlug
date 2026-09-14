@@ -93,10 +93,24 @@ public:
     }
 
     void OpenSettings() override {
-        [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices"]];
+        OpenMacLocationSettings();
     }
 };
 
 ILocationService* CreateMacLocationService() {
     return new MacLocationService();
+}
+
+bool RequestMacLocation(double& latitude, double& longitude, std::string& error) {
+    GeoLocation location{};
+    if (!RequestCoreLocation(location, error)) {
+        return false;
+    }
+    latitude = location.latitude;
+    longitude = location.longitude;
+    return true;
+}
+
+void OpenMacLocationSettings() {
+    [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices"]];
 }

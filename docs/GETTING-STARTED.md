@@ -1,11 +1,11 @@
 # Getting started with DuskPlug
 
-This guide walks through creating a Tuya cloud project, linking the phone app that already controls your plug, and entering those details in DuskPlug.
+This guide walks through creating a Tuya cloud project, linking the phone app that already controls your plug or bulb, and entering those details in DuskPlug.
 
 ## Before you begin
 
 - Windows 10 or 11
-- A Tuya-compatible smart plug that already works in the **Smart Life**, **Tuya**, or **Status** phone app
+- A Tuya-compatible smart plug or dimmable bulb that already works in the **Smart Life**, **Tuya**, or **Status** phone app
 - About 10 minutes for a one-time cloud setup (free)
 
 DuskPlug never stores your credentials in the GitHub repo. They are saved only on your PC in `%APPDATA%\SMART\config.json`.
@@ -92,7 +92,7 @@ Treat the secret like a password. Do not commit it to Git or paste it into a pub
 
 Confirm the **Data Center** on Overview matches what you will pick in DuskPlug.
 
-## 6. Link your phone app (the step most people miss)
+## 6. Link your phone app
 
 Creating a cloud project does **not** automatically see your plug. You must authorize the consumer app account:
 
@@ -115,10 +115,10 @@ If **All Devices** is empty:
 ## 7. Copy the Device ID
 
 1. Still under **Devices → All Devices**.
-2. Find your smart plug.
-3. Copy **Device ID**. It is a long alphanumeric id (about 20 characters).
+2. Find each smart plug or bulb you want DuskPlug to control.
+3. Copy **Device ID** for each one. It is a long alphanumeric id (about 20 characters).
 
-That is the id DuskPlug will send on/off commands to.
+Those are the ids DuskPlug will send commands to. You can add more devices later in Settings.
 
 ## 8. Enter the configuration in DuskPlug
 
@@ -126,48 +126,61 @@ Double-click **`Start-DuskPlug.cmd`**.
 
 On first run, **DuskPlug Settings** opens automatically. Later you can open it from the tray icon: right-click → **Settings...**
 
-### Plug connection (required)
+### Connection (required)
 
 | Settings field | Paste / choose |
 |----------------|----------------|
 | **Access ID** | Access ID from project Overview → Authorization Key |
 | **Access Secret** | Access Secret from the same place |
-| **Device ID** | Device ID from All Devices |
 | **Data center** | Same **Data Center** as the cloud project Overview (UK: usually **Central Europe**, or **Western Europe** if that is what the project uses) |
+
+Add each device by **Device ID** from All Devices. With one device, Settings shows a single flat page. With two or more, you get a device list — tap a device for its automation and brightness settings. Use **Add device** to paste a new Device ID; DuskPlug discovers whether it is a plug or bulb and the correct switch/brightness codes.
 
 Click **Save**.
 
-Alternatively, double-click **`Setup.cmd`** for a terminal wizard that asks for the same values and then **tests** the connection (token, device functions, optional live toggle).
+Alternatively, double-click **`Setup.cmd`** for a terminal wizard that asks for credentials, lets you add multiple devices in a loop, discovers plug vs bulb capabilities, and **tests** the connection (token, device functions, optional live toggle).
 
 ### Smart Mode location (needed for dusk/dawn)
 
-In Settings, under **Smart Mode location**:
+In Settings, under **Location**:
 
 1. Click **Detect Location**, type latitude and longitude, or paste coordinates copied from Google Maps (for example `51.48096831196373, -3.209212141442959`).
 2. Windows may prompt for location access. Allow it, and in Windows **Settings → Privacy & security → Location** turn on location services and **Let desktop apps access your location**.
-3. Leave **After sunset** / **Before sunrise** at `0` unless you want the light to come on a few minutes after sunset or stay on a few minutes after sunrise.
+3. Per device, leave **After sunset** / **Before sunrise** at `0` unless you want the light to come on a few minutes after sunset or stay on a few minutes after sunrise.
 
-### Daily schedule (needed for Schedule Mode)
+### Automation (per device)
 
-Set **Turn plug ON at** and **Turn plug OFF at**. Overnight spans such as 22:00 → 06:00 are allowed. The two times cannot be the same.
+For each plug or bulb, choose **Manual**, **Smart**, or **Schedule** in Settings:
+
+- **Smart** — on at sunset, off at sunrise using the shared location above.
+- **Schedule** — set **Turn ON at** and **Turn OFF at**. Overnight spans such as 22:00 → 06:00 are allowed. The two times cannot be the same.
+
+For **bulbs**, optional **Light brightness** sets night and day dimming when **Use brightness** is enabled.
+
+### Screen brightness (optional, local display)
+
+Under **Screen brightness**, set **Night (%)** and **Day (%)** (defaults 20 and 80). These apply to every controllable display when **Adjust screen brightness** is enabled from the tray while any device is in Smart or Schedule mode. DuskPlug restores your previous brightness when you turn that option off.
+
+Some external monitors need **DDC/CI** turned on in the monitor’s on-screen menu.
 
 ### Advanced
 
-Leave **Switch code** as `switch_1` unless Setup or the Tuya device functions list shows a different switch code. **Lock-off seconds** (default 30) is how long the screen can stay locked, and how long after sleep/hibernate, before the plug turns off.
+Leave **Switch code** as `switch_1` (plugs) or `switch_led` (bulbs) unless Setup or the Tuya device functions list shows a different code. **Lock-off seconds** (default 30) is how long the screen can stay locked, and how long after sleep/hibernate, before automated devices turn off.
 
 ## 9. Use the tray
 
 You should see a lightbulb icon near the clock.
 
-- **Left-click** toggles the plug (this leaves Smart/Schedule Mode and goes back to manual).
+- **Left-click** toggles your device(s). With one device this is a simple on/off; with multiple devices it toggles all enabled devices.
 - **Right-click** opens the menu:
-  - **Turn On** / **Turn Off** — manual control
-  - **Smart Mode** — on at dusk, off at dawn, using your location
-  - **Schedule Mode** — follows the daily ON/OFF times from Settings
-  - **Settings...** — change Tuya details, location, or schedule
-  - **Refresh Status** — re-read the plug from the cloud
+  - **Turn On** / **Turn Off** — manual control (or **Turn all on/off** when you have 2+ devices)
+  - Per-device entries when you have 2+ devices — manual on/off for each, with its current automation mode shown
+  - **Off when locked or sleeping** — turn automated devices off after lock or sleep
+  - **Adjust screen brightness** — dim or brighten your local screen at night and day
+  - **Settings...** — change Tuya credentials, add devices, location, per-device automation, and bulb brightness
+  - **Refresh Status** — re-read device state from the cloud
 
-A checkmark on **Smart Mode** or **Schedule Mode** means that mode is active.
+Automation modes (**Manual**, **Smart**, **Schedule**) are configured per device in Settings, not from the tray menu.
 
 ## 10. Optional: start with Windows
 
@@ -176,7 +189,7 @@ Double-click **`Install-Startup.cmd`** so DuskPlug runs when you log in. **`Unin
 ## What success looks like
 
 - Settings saves without an error (or Setup prints `Setup successful!`)
-- Left-clicking the tray icon turns the physical plug on and off
+- Left-clicking the tray icon turns your plug or bulb on and off
 - You did not have to edit any JSON by hand
 
 ## Troubleshooting
@@ -190,5 +203,6 @@ Double-click **`Install-Startup.cmd`** so DuskPlug runs when you log in. **`Unin
 | Smart Mode needs location | Windows **Settings → Privacy & security → Location**: services On, desktop apps On, then **Detect Location** in DuskPlug |
 | Plug does not change | Confirm Device ID is the plug (not another device), and that the phone app can still control it |
 | No tray icon | Start **DuskPlug** from the Start menu, or run **`Start-DuskPlug.cmd`** from the ZIP |
+| Screen brightness does not change | Turn on **Adjust screen brightness** in the tray while Smart or Schedule Mode is active. On external monitors, enable **DDC/CI** in the monitor menu and use a direct HDMI/DisplayPort/USB-C cable (some docks and adapters block brightness control). On Linux laptops, your user may need membership in the **`video`** group to write `/sys/class/backlight`. Install **`ddcutil`** if you want external monitor support on Linux. |
 
 Official Tuya walkthroughs: [Request Tuya Cloud API Key](https://developer.tuya.com/en/docs/developer/apply-cloud-api-key?id=Kff30z8sv62ah) and [Smart Home project wizard](https://developer.tuya.com/en/docs/iot/Platform_Configuration_smarthome?id=Kamcgamwoevrx).

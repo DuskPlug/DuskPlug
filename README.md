@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/DuskPlug/DuskPlug/actions/workflows/ci.yml/badge.svg)](https://github.com/DuskPlug/DuskPlug/actions/workflows/ci.yml)
 
-Control a Tuya smart plug from the system tray (Windows, Linux) or menu bar (macOS) — manual on/off, **Smart Mode** (on at dusk, off at dawn), and **Schedule Mode** (fixed daily times).
+Control Tuya smart plugs and dimmable bulbs from the system tray (Windows, Linux) or menu bar (macOS) — manual on/off plus per-device **Smart Mode** (on at dusk, off at dawn), **Schedule Mode** (fixed daily times), and optional night/day brightness for bulbs.
 
 Free, open source, and MIT-licensed. You only need your own free Tuya cloud project — no DuskPlug account.
 
@@ -24,8 +24,10 @@ Free, open source, and MIT-licensed. You only need your own free Tuya cloud proj
 
 - **Free and open source** — MIT license, no subscription
 - **Your Tuya project only** — credentials stay on your PC (see config paths below)
-- **Smart Mode** — sunset on, sunrise off from your location
-- **Schedule Mode** — fixed daily on/off times
+- **Multi-device** — plugs and dimmable bulbs, each with its own automation mode
+- **Smart Mode** — sunset on, sunrise off from your location (per device)
+- **Schedule Mode** — fixed daily on/off times (per device)
+- **Bulb brightness** — optional night/day dimming for supported bulbs
 - **Easy install** — MSI installer or portable ZIP
 
 ## Download
@@ -68,11 +70,11 @@ You need a free [Tuya Developer Platform](https://iot.tuya.com) project so Windo
    - **Access ID / Client ID**  
    - **Access Secret / Client Secret**
 
-6. **Link the phone app** (this is the step most people miss)  
+6. **Link the phone app**  
    **Devices → Link Tuya App Account → Add App Account** → **Tuya App Account Authorization** → scan the QR code from the **same** phone app that already controls the plug → **Confirm**. Leave **Automatic Link** selected.  
    **All Devices** should then list your plug.
 
-7. **Copy Device ID** from **Devices → All Devices** for that plug.
+7. **Copy Device ID** from **Devices → All Devices** for each plug or bulb you want to control.
 
 Do not put Access Secret or Device ID in git. DuskPlug stores them locally:
 
@@ -86,32 +88,33 @@ Do not put Access Secret or Device ID in git. DuskPlug stores them locally:
 
 Double-click **`Start-DuskPlug.cmd`**. On first run, **Settings** opens automatically. Later: tray icon → right-click → **Settings...**
 
-**Plug connection** (required):
+**Connection** (required):
 
 | Field | What to enter |
 |-------|----------------|
 | **Access ID** | Access ID from Tuya Overview |
 | **Access Secret** | Access Secret from Tuya Overview |
-| **Device ID** | Device ID from All Devices |
 | **Data center** | Same Data Center as the project Overview |
+
+Add one or more devices by **Device ID** (from All Devices). With a single device, Settings shows a flat page; with two or more, you get a device list and per-device detail pages.
 
 Click **Save**.
 
 **Smart Mode location:** click **Detect Location** (allow Windows location for desktop apps), type latitude/longitude, or paste a Google Maps pair such as `51.4809, -3.2092`.
 
-**Daily schedule:** set ON and OFF times if you will use Schedule Mode. Overnight spans (22:00 → 06:00) are fine.
+**Automation:** choose **Manual**, **Smart**, or **Schedule** per device in Settings. For bulbs, set optional night/day brightness when using Smart or Schedule mode.
 
-Alternatively, **`Setup.cmd`** is a terminal wizard that fills the same values and tests the live connection to the plug.
+Alternatively, **`Setup.cmd`** is a terminal wizard that fills the same values, discovers plug vs bulb capabilities, and tests the live connection.
 
 ### Tray
 
-A lightbulb appears near the clock. Left-click toggles the plug. Right-click for **Smart Mode**, **Schedule Mode**, **Off when locked or sleeping** (toggle lock/sleep auto-off while in Smart or Schedule mode), **Settings...**, and the rest.
+A lightbulb appears near the clock. With one device, left-click toggles it. With multiple devices, left-click toggles all enabled devices and the menu lists each device separately. Right-click for **Turn all on/off** (when you have 2+ devices), **Off when locked or sleeping**, **Adjust screen brightness** (optional night/day backlight levels), **Settings...**, and the rest.
 
 | Mode | What it does |
 |------|----------------|
-| **Manual** | You control the plug (default) |
-| **Smart Mode** | On at sunset, off at sunrise |
-| **Schedule Mode** | Follows the daily ON/OFF times from Settings |
+| **Manual** | You control the device from the tray (default) |
+| **Smart** | On at sunset, off at sunrise — configured per device in Settings |
+| **Schedule** | Follows that device’s daily ON/OFF times from Settings |
 
 Optional: **`Install-Startup.cmd`** runs DuskPlug at Windows login.
 

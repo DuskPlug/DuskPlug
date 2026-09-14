@@ -16,9 +16,11 @@ That file includes:
 
 - Tuya Cloud API credentials (Access ID, Access Secret, Device ID) that you enter
 - Optional latitude and longitude for Smart Mode (dusk/dawn times)
-- Schedule and preference settings
+- Schedule and preference settings (including optional screen brightness night/day levels)
 
 This data never leaves your PC except when DuskPlug calls the Tuya Cloud API to control your plug, using your own Tuya developer project.
+
+Screen brightness changes are applied locally through your operating system’s display APIs. DuskPlug does not send brightness data anywhere.
 
 ## Location
 
