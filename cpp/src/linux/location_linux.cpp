@@ -21,7 +21,7 @@ bool TryGeoclue(GeoLocation& out, std::string& error) {
     GError* gerror = nullptr;
     GClueSimple* simple = gclue_simple_new_sync(
         "duskplug",
-        GCLUE_ACCURACY_CITY,
+        GCLUE_ACCURACY_LEVEL_CITY,
         nullptr,
         &gerror);
     if (!simple) {
