@@ -36,5 +36,5 @@ if ($existing -eq $content) {
     return
 }
 
-Set-Content -Path $OutFile -Value $content -NoNewline -Encoding utf8
+[System.IO.File]::WriteAllText($OutFile, $content, (New-Object System.Text.UTF8Encoding $false))
 Write-Host "Wrote $OutFile ($version)"

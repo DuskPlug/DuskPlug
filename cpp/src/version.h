@@ -1,6 +1,6 @@
-﻿#pragma once
+#pragma once
 
-#define DUSKPLUG_VERSION "1.0.3"
+#define DUSKPLUG_VERSION "1.0.4"
 #define DUSKPLUG_VERSION_MAJOR 1
 #define DUSKPLUG_VERSION_MINOR 0
-#define DUSKPLUG_VERSION_PATCH 3
+#define DUSKPLUG_VERSION_PATCH 4

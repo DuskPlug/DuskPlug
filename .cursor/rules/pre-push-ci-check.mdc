@@ -7,9 +7,10 @@ alwaysApply: true
 
 Before committing or pushing changes that touch `cpp/`, tests, or CI build config:
 
-1. Run `cpp\ci-check.cmd` on Windows (or `powershell -File cpp/ci-check.ps1`).
-2. Fix any failures before commit or push.
-3. When adding or renaming tests, update **both**:
+1. Bump version first (`powershell -File scripts\bump-version.ps1`) unless this is docs-only.
+2. Run `cpp\ci-check.cmd` on Windows (or `powershell -File cpp/ci-check.ps1`).
+3. Fix any failures before commit or push.
+4. When adding or renaming tests, update **both**:
    - `cpp/test.ps1` (Windows CI via `test.cmd`)
    - `duskplug_tests` in `cpp/CMakeLists.txt` (Linux/macOS CI)
 

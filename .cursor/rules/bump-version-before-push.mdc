@@ -1,0 +1,18 @@
+---
+description: Bump the app version before committing or pushing code changes
+alwaysApply: true
+---
+
+# Version bump before push
+
+Before committing or pushing changes that affect the app (anything under `cpp/`, `assets/`, `installer/`, or user-facing scripts):
+
+1. Bump semver in `VERSION` with `powershell -File scripts\bump-version.ps1` (default: **patch**).
+   - Use `-Part minor` for a feature release; `-Part major` for breaking changes.
+2. Confirm `cpp/src/version.h` and `cpp/macos/Info.plist` were updated by the script.
+3. Run `cpp\ci-check.cmd`.
+4. Include `VERSION`, `cpp/src/version.h`, and `cpp/macos/Info.plist` in the same commit as the code changes.
+
+Do **not** bump for docs-only or `.cursor/rules/` edits unless the user asks.
+
+Packaging manifests (`packaging/winget/`, `packaging/scoop/`) are updated **after** a tagged GitHub release, not on every push.
