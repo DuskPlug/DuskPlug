@@ -111,7 +111,7 @@ $libs = @(
 $sources = @(
     'main.cpp', 'config.cpp', 'crypto.cpp', 'platform_util.cpp', 'http_win.cpp', 'tuya_client.cpp', 'json_util.cpp',
     'solar.cpp', 'schedule.cpp', 'coords.cpp', 'settings_page.cpp', 'settings_dialog.cpp', 'location_win.cpp', 'location_cli.cpp', 'activity_win.cpp',
-    'location_service_win.cpp', 'brightness_win.cpp', 'tray_brightness_win.cpp', 'tray_menu.cpp', 'smart_mode.cpp', 'semver.cpp', 'install_kind.cpp', 'update_checker.cpp',
+    'location_service_win.cpp', 'brightness_win.cpp', 'tray_brightness_win.cpp', 'tray_menu.cpp', 'timed_dialog.cpp', 'smart_mode.cpp', 'semver.cpp', 'install_kind.cpp', 'update_checker.cpp',
     'update_apply_win.cpp'
 ) | ForEach-Object { Join-Path $Src $_ }
 

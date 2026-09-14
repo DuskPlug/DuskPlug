@@ -5,7 +5,36 @@
 #include "schedule.h"
 #include "solar.h"
 
+#include <chrono>
+#include <cmath>
+#include <ctime>
+
 namespace {
+
+struct LocalNow {
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+};
+
+LocalNow GetLocalNow() {
+    const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm local{};
+#ifdef _WIN32
+    localtime_s(&local, &now);
+#else
+    localtime_r(&now, &local);
+#endif
+    return {
+        local.tm_year + 1900,
+        local.tm_mon + 1,
+        local.tm_mday,
+        local.tm_hour,
+        local.tm_min,
+    };
+}
 
 bool LocationIsStale(uint64_t resolvedAtMs) {
     if (resolvedAtMs == 0) {
@@ -20,6 +49,10 @@ bool DeviceUsesSmart(const DeviceConfig& device) {
 
 bool DeviceUsesSchedule(const DeviceConfig& device) {
     return device.enabled && device.automation.mode == DeviceAutomationMode::Schedule;
+}
+
+bool DeviceUsesTimed(const DeviceConfig& device) {
+    return device.enabled && device.automation.mode == DeviceAutomationMode::Timed;
 }
 
 bool DeviceIsAutomated(const DeviceConfig& device) {
@@ -173,7 +206,7 @@ int SmartModeController::GetScreenBrightnessPercent() const {
     if (hasAppliedBrightness_ && lastAppliedBrightnessPercent_ >= 0) {
         return lastAppliedBrightnessPercent_;
     }
-    return ShouldUseNightBrightness() ? config_.screenBrightnessNight : config_.screenBrightnessDay;
+    return ComputeScreenBrightnessTarget();
 }
 
 void SmartModeController::SetScreenBrightnessPercent(int percent) {
@@ -255,6 +288,10 @@ bool SmartModeController::StartActivityTracking(std::string& error) {
 }
 
 bool SmartModeController::ShouldBeOnForDevice(const DeviceConfig& device) const {
+    if (DeviceUsesTimed(device)) {
+        return IsTimedModeActive();
+    }
+
     if (DeviceUsesSchedule(device)) {
         int onMinutes = 0;
         int offMinutes = 0;
@@ -387,6 +424,59 @@ bool SmartModeController::ShouldUseNightBrightness() const {
     return false;
 }
 
+int SmartModeController::ComputeScreenBrightnessTarget() const {
+    for (const auto& device : config_.devices) {
+        if (DeviceUsesSchedule(device)) {
+            int onMinutes = 0;
+            int offMinutes = 0;
+            if (ParseTimeHHMM(device.automation.scheduleOnTime, onMinutes)
+                && ParseTimeHHMM(device.automation.scheduleOffTime, offMinutes)) {
+                if (ShouldBeOnForSchedule(onMinutes, offMinutes, GetLocalMinutesNow())) {
+                    return config_.screenBrightnessNight;
+                }
+            }
+        }
+    }
+
+    double latitude = 0.0;
+    double longitude = 0.0;
+    bool hasCoords = false;
+    if (config_.hasLatitude && config_.hasLongitude) {
+        latitude = config_.latitude;
+        longitude = config_.longitude;
+        hasCoords = true;
+    } else if (hasLocation_) {
+        latitude = location_.latitude;
+        longitude = location_.longitude;
+        hasCoords = true;
+    }
+
+    if (hasCoords
+        && config_.screenBrightnessAdaptive
+        && config_.windowAzimuthDegrees >= 0) {
+        const LocalNow now = GetLocalNow();
+        const SunPosition sun = ComputeSunPosition(
+            latitude,
+            longitude,
+            now.year,
+            now.month,
+            now.day,
+            now.hour,
+            now.minute);
+        const double factor = WindowSunExposure(
+            sun.azimuthDegrees,
+            sun.elevationDegrees,
+            static_cast<double>(config_.windowAzimuthDegrees),
+            config_.windowGlareWeight);
+        const int night = config_.screenBrightnessNight;
+        const int day = config_.screenBrightnessDay;
+        const int target = night + static_cast<int>(std::lround(static_cast<double>(day - night) * factor));
+        return ClampScreenBrightnessPercent(target);
+    }
+
+    return ShouldUseNightBrightness() ? config_.screenBrightnessNight : config_.screenBrightnessDay;
+}
+
 void SmartModeController::ReleaseBrightness() {
     if (brightnessCaptured_ && brightness_) {
         brightness_->Restore();
@@ -416,10 +506,10 @@ void SmartModeController::ApplyBrightness() {
         brightnessCaptured_ = true;
     }
 
-    const int target = ShouldUseNightBrightness()
-        ? config_.screenBrightnessNight
-        : config_.screenBrightnessDay;
-    if (hasAppliedBrightness_ && lastAppliedBrightnessPercent_ == target) {
+    const int target = ComputeScreenBrightnessTarget();
+    if (hasAppliedBrightness_
+        && lastAppliedBrightnessPercent_ >= 0
+        && std::abs(lastAppliedBrightnessPercent_ - target) < 1) {
         return;
     }
 
@@ -594,6 +684,19 @@ size_t SmartModeController::GetEnabledDeviceCount() const {
     return GetEnabledDevices(config_).size();
 }
 
+bool SmartModeController::HasDeviceKnownState(const std::string& deviceId) const {
+    const auto it = runtimeByDeviceId_.find(deviceId);
+    return it != runtimeByDeviceId_.end() && it->second.hasKnownState;
+}
+
+bool SmartModeController::GetDeviceKnownOn(const std::string& deviceId) const {
+    const auto it = runtimeByDeviceId_.find(deviceId);
+    if (it == runtimeByDeviceId_.end() || !it->second.hasKnownState) {
+        return false;
+    }
+    return it->second.knownOn;
+}
+
 bool SmartModeController::SetDeviceSwitch(const DeviceConfig& device, bool on, std::string& error) {
     if (!client_) {
         error = "Tuya client unavailable";
@@ -609,6 +712,57 @@ bool SmartModeController::SetDeviceSwitch(const DeviceConfig& device, bool on, s
     runtime.lastAppliedOn = on;
     UpdateTrayFromRuntimeState();
     return true;
+}
+
+void SmartModeController::StartTimedMode(int minutes) {
+    activeTimedMinutes_ = ClampTimedDurationMinutes(minutes);
+    timedExpiresAtMs_ = MonotonicTimeMs() + static_cast<uint64_t>(activeTimedMinutes_) * 60ULL * 1000ULL;
+
+    for (const auto& device : config_.devices) {
+        if (!device.enabled) {
+            continue;
+        }
+        std::string error;
+        SetDeviceSwitch(device, true, error);
+    }
+    UpdateTrayFromRuntimeState();
+}
+
+void SmartModeController::CancelTimedMode() {
+    timedExpiresAtMs_ = 0;
+    activeTimedMinutes_ = 0;
+}
+
+void SmartModeController::OnTimedModeTick() {
+    if (!IsTimedModeExpired()) {
+        return;
+    }
+
+    for (const auto& device : config_.devices) {
+        if (!device.enabled) {
+            continue;
+        }
+        std::string error;
+        SetDeviceSwitch(device, false, error);
+    }
+    CancelTimedMode();
+    UpdateTrayFromRuntimeState();
+
+    if (callbacks_.onTimedModeExpired) {
+        callbacks_.onTimedModeExpired();
+    }
+}
+
+bool SmartModeController::IsTimedModeActive() const {
+    return timedExpiresAtMs_ != 0 && MonotonicTimeMs() < timedExpiresAtMs_;
+}
+
+bool SmartModeController::IsTimedModeExpired() const {
+    return timedExpiresAtMs_ != 0 && MonotonicTimeMs() >= timedExpiresAtMs_;
+}
+
+int SmartModeController::GetTimedDurationMinutes() const {
+    return activeTimedMinutes_;
 }
 
 bool SmartModeController::ToggleDevice(const DeviceConfig& device, std::string& error, bool& newState) {

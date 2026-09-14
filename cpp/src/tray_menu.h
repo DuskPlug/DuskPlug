@@ -7,6 +7,7 @@ enum class TrayPowerModeItem {
     Off,
     Smart,
     Schedule,
+    Timed,
     LockOff,
 };
 
@@ -14,6 +15,7 @@ bool IsTrayMenuItemChecked(
     TrayPowerModeItem item,
     bool smartActive,
     bool scheduleActive,
+    bool timedActive,
     bool lockOffEnabled,
     bool hasKnownState,
     bool knownOn,

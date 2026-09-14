@@ -14,6 +14,7 @@ struct SmartModeCallbacks {
     std::function<void(bool anyOn, size_t onCount, size_t totalCount)> updateTray;
     std::function<void(const std::string& text)> showSetupMessage;
     std::function<bool()> isBusy;
+    std::function<void()> onTimedModeExpired;
 };
 
 struct DeviceRuntimeState {
@@ -71,6 +72,15 @@ public:
 
     bool SetDeviceSwitch(const DeviceConfig& device, bool on, std::string& error);
     bool ToggleDevice(const DeviceConfig& device, std::string& error, bool& newState);
+    bool HasDeviceKnownState(const std::string& deviceId) const;
+    bool GetDeviceKnownOn(const std::string& deviceId) const;
+
+    void StartTimedMode(int minutes);
+    void CancelTimedMode();
+    void OnTimedModeTick();
+    bool IsTimedModeActive() const;
+    bool IsTimedModeExpired() const;
+    int GetTimedDurationMinutes() const;
 
 private:
     struct DesiredDeviceState {
@@ -83,6 +93,7 @@ private:
     bool ShouldBeOnForDevice(const DeviceConfig& device) const;
     bool IsNightForDevice(const DeviceConfig& device) const;
     bool ShouldUseNightBrightness() const;
+    int ComputeScreenBrightnessTarget() const;
     DesiredDeviceState ComputeDesiredState(const DeviceConfig& device) const;
     void ApplyDesiredState(const DeviceConfig& device, const DesiredDeviceState& desired);
     void ApplyBrightness();
@@ -111,4 +122,6 @@ private:
     int lastAppliedBrightnessPercent_ = -1;
     bool brightnessUnavailableNotified_ = false;
     bool activityStarted_ = false;
+    uint64_t timedExpiresAtMs_ = 0;
+    int activeTimedMinutes_ = 0;
 };

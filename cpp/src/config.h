@@ -12,6 +12,7 @@ enum class DeviceAutomationMode {
     Manual,
     Smart,
     Schedule,
+    Timed,
 };
 
 struct DeviceCapabilities {
@@ -30,6 +31,7 @@ struct DeviceAutomation {
     int nightBrightness = 20;
     int dayBrightness = 80;
     bool useBrightness = true;
+    int timedDurationMinutes = 30;
 };
 
 struct DeviceConfig {
@@ -60,6 +62,9 @@ struct AppConfig {
     int lockOffSeconds = 30;
     int screenBrightnessNight = 20;
     int screenBrightnessDay = 80;
+    bool screenBrightnessAdaptive = false;
+    int windowAzimuthDegrees = -1;
+    double windowGlareWeight = 0.6;
     std::string scheduleOnTime = "18:00";
     std::string scheduleOffTime = "23:00";
     bool hasScheduleTimes = false;
@@ -67,6 +72,7 @@ struct AppConfig {
 
 int ClampScreenBrightnessPercent(int percent);
 int ClampDeviceBrightnessPercent(int percent);
+int ClampTimedDurationMinutes(int minutes);
 
 const DeviceConfig* GetPrimaryDevice(const AppConfig& config);
 std::vector<const DeviceConfig*> GetEnabledDevices(const AppConfig& config);

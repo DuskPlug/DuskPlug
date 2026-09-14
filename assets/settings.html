@@ -126,6 +126,24 @@
       <label style="margin-top:10px">Day (%)
         <div class="bright-row"><input id="brightnessDay" type="range" min="0" max="100"><output id="brightnessDayOut">80</output></div>
       </label>
+      <label style="margin-top:10px">Window faces
+        <select id="windowFacing">
+          <option value="-1">Not set</option>
+          <option value="0">North</option>
+          <option value="45">North-east</option>
+          <option value="90">East</option>
+          <option value="135">South-east</option>
+          <option value="180">South</option>
+          <option value="225">South-west</option>
+          <option value="270">West</option>
+          <option value="315">North-west</option>
+        </select>
+      </label>
+      <label class="check-row" style="margin-top:10px">
+        <input id="screenBrightnessAdaptive" type="checkbox">
+        Adjust through the day based on window direction and season
+      </label>
+      <p class="hint">East-facing: brighter in the morning when the sun hits your window; less boost when the sun is behind the house.</p>
       <label style="margin-top:10px">Lock-off seconds<input id="lockOff" type="number" min="0"></label>
     </section>
   </main>
@@ -285,6 +303,8 @@
       $("brightnessDay").value = config.screenBrightnessDay || 80;
       $("brightnessNightOut").textContent = String(config.screenBrightnessNight || 20);
       $("brightnessDayOut").textContent = String(config.screenBrightnessDay || 80);
+      $("windowFacing").value = String(config.windowAzimuthDegrees ?? -1);
+      $("screenBrightnessAdaptive").checked = !!config.screenBrightnessAdaptive;
       const select = $("dataCenter"); select.innerHTML = "";
       (dataCenters || []).forEach(item => { const opt = document.createElement("option"); opt.value = String(item.id); opt.textContent = item.label; select.appendChild(opt); });
       select.value = String(config.dataCenterIndex || 0);
@@ -305,6 +325,8 @@
         lockOffSeconds: Number($("lockOff").value),
         screenBrightnessNight: Number($("brightnessNight").value),
         screenBrightnessDay: Number($("brightnessDay").value),
+        windowAzimuthDegrees: Number($("windowFacing").value),
+        screenBrightnessAdaptive: $("screenBrightnessAdaptive").checked,
         devices: devices
       };
     }

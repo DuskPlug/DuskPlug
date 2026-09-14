@@ -4,6 +4,7 @@ bool IsTrayMenuItemChecked(
     TrayPowerModeItem item,
     bool smartActive,
     bool scheduleActive,
+    bool timedActive,
     bool lockOffEnabled,
     bool hasKnownState,
     bool knownOn,
@@ -14,10 +15,12 @@ bool IsTrayMenuItemChecked(
         return smartActive;
     case TrayPowerModeItem::Schedule:
         return scheduleActive;
+    case TrayPowerModeItem::Timed:
+        return timedActive;
     case TrayPowerModeItem::LockOff:
         return lockOffEnabled;
     case TrayPowerModeItem::On:
-        if (smartActive || scheduleActive || !hasKnownState) {
+        if (smartActive || scheduleActive || timedActive || !hasKnownState) {
             return false;
         }
         if (totalDevices <= 1) {
@@ -25,7 +28,7 @@ bool IsTrayMenuItemChecked(
         }
         return onCount == totalDevices;
     case TrayPowerModeItem::Off:
-        if (smartActive || scheduleActive || !hasKnownState) {
+        if (smartActive || scheduleActive || timedActive || !hasKnownState) {
             return false;
         }
         if (totalDevices <= 1) {

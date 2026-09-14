@@ -2,6 +2,7 @@
 #include "json_util.h"
 #include "platform_util.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 
@@ -240,6 +241,9 @@ bool ParseDeviceConfigJson(const std::string& json, DeviceConfig& out) {
         if (auto lightOffset = JsonGetNumber(*automation, "lightOffsetMinutes")) {
             out.automation.lightOffsetMinutes = static_cast<int>(*lightOffset);
         }
+        if (auto timedMinutes = JsonGetNumber(*automation, "timedDurationMinutes")) {
+            out.automation.timedDurationMinutes = ClampTimedDurationMinutes(static_cast<int>(*timedMinutes));
+        }
         if (auto night = JsonGetNumber(*automation, "nightBrightness")) {
             out.automation.nightBrightness = ClampDeviceBrightnessPercent(static_cast<int>(*night));
         }
@@ -281,7 +285,8 @@ std::string SerializeDeviceConfigJson(const DeviceConfig& device) {
     json += "        \"lightOffsetMinutes\": " + std::to_string(device.automation.lightOffsetMinutes) + ",\r\n";
     json += "        \"nightBrightness\": " + std::to_string(device.automation.nightBrightness) + ",\r\n";
     json += "        \"dayBrightness\": " + std::to_string(device.automation.dayBrightness) + ",\r\n";
-    json += "        \"useBrightness\": " + std::string(device.automation.useBrightness ? "true" : "false") + "\r\n";
+    json += "        \"useBrightness\": " + std::string(device.automation.useBrightness ? "true" : "false") + ",\r\n";
+    json += "        \"timedDurationMinutes\": " + std::to_string(device.automation.timedDurationMinutes) + "\r\n";
     json += "      }\r\n";
     json += "    }";
     return json;
@@ -319,6 +324,12 @@ std::string SerializeAppConfig(const AppConfig& config) {
     json += "  \"LockOffSeconds\": " + std::to_string(normalized.lockOffSeconds) + ",\r\n";
     json += "  \"ScreenBrightnessNight\": " + std::to_string(ClampScreenBrightnessPercentValue(normalized.screenBrightnessNight)) + ",\r\n";
     json += "  \"ScreenBrightnessDay\": " + std::to_string(ClampScreenBrightnessPercentValue(normalized.screenBrightnessDay)) + ",\r\n";
+    json += "  \"ScreenBrightnessAdaptive\": " + std::string(normalized.screenBrightnessAdaptive ? "true" : "false") + ",\r\n";
+    json += "  \"WindowAzimuthDegrees\": " + std::to_string(normalized.windowAzimuthDegrees) + ",\r\n";
+    snprintf(number, sizeof(number), "%.2f", normalized.windowGlareWeight);
+    json += "  \"WindowGlareWeight\": ";
+    json += number;
+    json += ",\r\n";
     json += "  \"ScheduleOnTime\": \"" + JsonEscapeConfig(normalized.scheduleOnTime) + "\",\r\n";
     json += "  \"ScheduleOffTime\": \"" + JsonEscapeConfig(normalized.scheduleOffTime) + "\"\r\n";
     json += "}\r\n";
@@ -360,12 +371,24 @@ DeviceType DeviceTypeFromString(const std::string& text) {
     return DeviceType::Plug;
 }
 
+int ClampTimedDurationMinutes(int minutes) {
+    if (minutes < 1) {
+        return 1;
+    }
+    if (minutes > 10080) {
+        return 10080;
+    }
+    return minutes;
+}
+
 std::string DeviceAutomationModeToString(DeviceAutomationMode mode) {
     switch (mode) {
     case DeviceAutomationMode::Smart:
         return "smart";
     case DeviceAutomationMode::Schedule:
         return "schedule";
+    case DeviceAutomationMode::Timed:
+        return "timed";
     case DeviceAutomationMode::Manual:
     default:
         return "manual";
@@ -378,6 +401,9 @@ DeviceAutomationMode DeviceAutomationModeFromString(const std::string& text) {
     }
     if (text == "schedule") {
         return DeviceAutomationMode::Schedule;
+    }
+    if (text == "timed") {
+        return DeviceAutomationMode::Timed;
     }
     return DeviceAutomationMode::Manual;
 }
@@ -557,6 +583,16 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error, boo
     }
     if (auto dayBrightness = JsonGetNumber(json, "ScreenBrightnessDay")) {
         out.screenBrightnessDay = ClampScreenBrightnessPercentValue(static_cast<int>(*dayBrightness));
+    }
+    bool screenBrightnessAdaptive = out.screenBrightnessAdaptive;
+    if (JsonGetBool(json, "ScreenBrightnessAdaptive", screenBrightnessAdaptive)) {
+        out.screenBrightnessAdaptive = screenBrightnessAdaptive;
+    }
+    if (auto windowAzimuth = JsonGetNumber(json, "WindowAzimuthDegrees")) {
+        out.windowAzimuthDegrees = static_cast<int>(*windowAzimuth);
+    }
+    if (auto glareWeight = JsonGetNumber(json, "WindowGlareWeight")) {
+        out.windowGlareWeight = std::clamp(*glareWeight, 0.0, 1.0);
     }
     if (auto scheduleOn = JsonGetString(json, "ScheduleOnTime")) {
         out.scheduleOnTime = *scheduleOn;

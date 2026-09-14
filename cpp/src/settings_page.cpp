@@ -240,7 +240,9 @@ std::string BuildSettingsBootJson(const AppConfig& config, const char* platform)
     json += "\"longitude\":" + std::string(number) + ",";
     json += "\"lockOffSeconds\":" + std::to_string(config.lockOffSeconds) + ",";
     json += "\"screenBrightnessNight\":" + std::to_string(config.screenBrightnessNight) + ",";
-    json += "\"screenBrightnessDay\":" + std::to_string(config.screenBrightnessDay);
+    json += "\"screenBrightnessDay\":" + std::to_string(config.screenBrightnessDay) + ",";
+    json += "\"screenBrightnessAdaptive\":" + std::string(config.screenBrightnessAdaptive ? "true" : "false") + ",";
+    json += "\"windowAzimuthDegrees\":" + std::to_string(config.windowAzimuthDegrees);
     json += "}}";
     return json;
 }
@@ -364,6 +366,19 @@ bool ApplySettingsFromJson(const std::string& json, AppConfig& config, std::stri
 
     config.screenBrightnessNight = ClampScreenBrightnessPercent(brightnessNight);
     config.screenBrightnessDay = ClampScreenBrightnessPercent(brightnessDay);
+
+    int windowAzimuth = config.windowAzimuthDegrees;
+    if (!ReadIntField(json, "windowAzimuthDegrees", windowAzimuth)) {
+        windowAzimuth = -1;
+    }
+    config.windowAzimuthDegrees = windowAzimuth;
+
+    bool screenBrightnessAdaptive = config.screenBrightnessAdaptive;
+    if (!ReadBoolField(json, "screenBrightnessAdaptive", screenBrightnessAdaptive)) {
+        screenBrightnessAdaptive = false;
+    }
+    config.screenBrightnessAdaptive = screenBrightnessAdaptive;
+
     SyncLegacyFieldsFromDevices(config);
     error.clear();
     return true;

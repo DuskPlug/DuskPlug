@@ -15,8 +15,15 @@ struct TrayBrightnessCallbacks {
     std::function<void(bool)> setAutoEnabled;
 };
 
+constexpr UINT WM_TRAY_BRIGHTNESS_SHOW = WM_APP + 21;
+constexpr UINT CMD_SCREEN_BRIGHTNESS_PLACEHOLDER = 10012;
+
 void InitTrayBrightnessUi(HWND owner, const TrayBrightnessCallbacks& callbacks);
 void ShutdownTrayBrightnessUi();
-void ShowTrayBrightnessSlider(HWND owner, HMENU parentMenu, UINT brightnessMenuItemId);
-void HideTrayBrightnessSlider();
+void OnTrayContextMenuOpening();
+void MeasureBrightnessPlaceholderItem(MEASUREITEMSTRUCT* measure);
+void DrawBrightnessPlaceholderItem(const DRAWITEMSTRUCT* draw);
+void RequestShowBrightnessPanel(HWND owner, HMENU brightnessSubMenu);
+void HideBrightnessPanel();
+void SyncBrightnessPanelAutoState();
 bool HandleTrayBrightnessMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& result);

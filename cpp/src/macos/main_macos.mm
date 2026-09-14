@@ -24,6 +24,8 @@
 @property(nonatomic, strong) NSMenuItem* turnOnItem;
 @property(nonatomic, strong) NSMenuItem* turnOffItem;
 @property(nonatomic, strong) NSMenuItem* lockOffItem;
+@property(nonatomic, strong) NSMenuItem* smartModeItem;
+@property(nonatomic, strong) NSMenuItem* scheduleModeItem;
 @property(nonatomic, strong) NSMenuItem* screenBrightnessItem;
 @property(nonatomic, strong) NSMenuItem* applyUpdateItem;
 @property(nonatomic, strong) NSTimer* pollTimer;
@@ -187,6 +189,75 @@ void RunPlugAction(bool toggle, bool setOn, bool statusOnly, int deviceIndex = -
     g_app.busy = false;
 }
 
+bool AnyEnabledDeviceUsesMode(DeviceAutomationMode mode) {
+    for (const auto& device : g_app.config.devices) {
+        if (device.enabled && device.automation.mode == mode) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void PersistConfigToDisk() {
+    SaveAppConfig(g_app.configPath, g_app.config);
+}
+
+void SetEnabledDevicesAutomationMode(DeviceAutomationMode mode) {
+    bool changed = false;
+    for (auto& device : g_app.config.devices) {
+        if (!device.enabled) {
+            continue;
+        }
+        if (device.automation.mode != mode) {
+            device.automation.mode = mode;
+            changed = true;
+        }
+    }
+    if (!changed) {
+        return;
+    }
+
+    SyncLegacyFieldsFromDevices(g_app.config);
+    PersistConfigToDisk();
+    g_app.smart.UpdateConfig(g_app.config);
+    if (g_app.smart.HasAutomatedDevices()) {
+        StartAutomationTimers(g_delegate);
+        g_app.smart.Evaluate();
+    }
+    [g_delegate rebuildMenu];
+}
+
+void SetDeviceAutomationMode(size_t deviceIndex, DeviceAutomationMode mode) {
+    const auto enabledDevices = GetEnabledDevices(g_app.config);
+    if (deviceIndex >= enabledDevices.size()) {
+        return;
+    }
+
+    const std::string& deviceId = enabledDevices[deviceIndex]->id;
+    bool changed = false;
+    for (auto& device : g_app.config.devices) {
+        if (device.id == deviceId && device.enabled) {
+            if (device.automation.mode != mode) {
+                device.automation.mode = mode;
+                changed = true;
+            }
+            break;
+        }
+    }
+    if (!changed) {
+        return;
+    }
+
+    SyncLegacyFieldsFromDevices(g_app.config);
+    PersistConfigToDisk();
+    g_app.smart.UpdateConfig(g_app.config);
+    if (g_app.smart.HasAutomatedDevices()) {
+        StartAutomationTimers(g_delegate);
+        g_app.smart.Evaluate();
+    }
+    [g_delegate rebuildMenu];
+}
+
 void StartAutomationTimers(DuskPlugAppDelegate* delegate) {
     delegate.smartTimer = [NSTimer scheduledTimerWithTimeInterval:10 repeats:YES block:^(__unused NSTimer* timer) {
         g_app.smart.Evaluate();
@@ -215,16 +286,42 @@ void StartAutomationTimers(DuskPlugAppDelegate* delegate) {
     } else {
         [self.menu addItemWithTitle:@"Turn all on" action:@selector(onTurnOn:) keyEquivalent:@""];
         [self.menu addItemWithTitle:@"Turn all off" action:@selector(onTurnOff:) keyEquivalent:@""];
+    }
+
+    self.smartModeItem = [[NSMenuItem alloc] initWithTitle:@"Smart Mode"
+                                                    action:@selector(onToggleSmartMode:)
+                                             keyEquivalent:@""];
+    [self.menu addItem:self.smartModeItem];
+
+    if (enabledDevices.size() > 1) {
         [self.menu addItem:[NSMenuItem separatorItem]];
         for (size_t i = 0; i < enabledDevices.size(); ++i) {
-            const std::string label = "Toggle " + enabledDevices[i]->name;
-            NSMenuItem* item = [self.menu addItemWithTitle:@(label.c_str())
-                                                    action:@selector(onToggleDevice:)
-                                             keyEquivalent:@""];
-            item.tag = static_cast<NSInteger>(i);
+            NSMenu* deviceMenu = [[NSMenu alloc] init];
+            auto addDeviceItem = ^(NSString* title, SEL action) {
+                NSMenuItem* item = [deviceMenu addItemWithTitle:title action:action keyEquivalent:@""];
+                item.tag = static_cast<NSInteger>(i);
+                item.target = self;
+            };
+            addDeviceItem(@"Turn On", @selector(onDeviceTurnOn:));
+            addDeviceItem(@"Turn Off", @selector(onDeviceTurnOff:));
+            [deviceMenu addItem:[NSMenuItem separatorItem]];
+            addDeviceItem(@"Manual", @selector(onDeviceModeManual:));
+            addDeviceItem(@"Smart", @selector(onDeviceModeSmart:));
+            addDeviceItem(@"Schedule", @selector(onDeviceModeSchedule:));
+
+            NSMenuItem* deviceItem = [[NSMenuItem alloc] initWithTitle:@(enabledDevices[i]->name.c_str())
+                                                                action:nil
+                                                         keyEquivalent:@""];
+            deviceItem.submenu = deviceMenu;
+            [self.menu addItem:deviceItem];
         }
     }
 
+    [self.menu addItem:[NSMenuItem separatorItem]];
+    self.scheduleModeItem = [[NSMenuItem alloc] initWithTitle:@"Schedule Mode"
+                                                       action:@selector(onToggleScheduleMode:)
+                                                keyEquivalent:@""];
+    [self.menu addItem:self.scheduleModeItem];
     [self.menu addItem:[NSMenuItem separatorItem]];
     self.lockOffItem = [[NSMenuItem alloc] initWithTitle:@"Off when locked or sleeping"
                                                   action:@selector(onToggleLockOff:)
@@ -318,8 +415,44 @@ void StartAutomationTimers(DuskPlugAppDelegate* delegate) {
 - (void)onTurnOff:(__unused id)sender { RunPlugAction(false, false, false); }
 - (void)onRefresh:(__unused id)sender { RunPlugAction(false, false, true); }
 
-- (void)onToggleDevice:(NSMenuItem*)sender {
-    RunPlugAction(true, false, false, static_cast<int>(sender.tag));
+- (void)onToggleSmartMode:(__unused id)sender {
+    if (AnyEnabledDeviceUsesMode(DeviceAutomationMode::Smart)) {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Manual);
+    } else {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Smart);
+    }
+}
+
+- (void)onToggleScheduleMode:(__unused id)sender {
+    if (AnyEnabledDeviceUsesMode(DeviceAutomationMode::Schedule)) {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Manual);
+    } else {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Schedule);
+    }
+}
+
+- (void)onDeviceTurnOn:(NSMenuItem*)sender {
+    const int deviceIndex = static_cast<int>(sender.tag);
+    SetDeviceAutomationMode(static_cast<size_t>(deviceIndex), DeviceAutomationMode::Manual);
+    RunPlugAction(false, true, false, deviceIndex);
+}
+
+- (void)onDeviceTurnOff:(NSMenuItem*)sender {
+    const int deviceIndex = static_cast<int>(sender.tag);
+    SetDeviceAutomationMode(static_cast<size_t>(deviceIndex), DeviceAutomationMode::Manual);
+    RunPlugAction(false, false, false, deviceIndex);
+}
+
+- (void)onDeviceModeManual:(NSMenuItem*)sender {
+    SetDeviceAutomationMode(static_cast<size_t>(sender.tag), DeviceAutomationMode::Manual);
+}
+
+- (void)onDeviceModeSmart:(NSMenuItem*)sender {
+    SetDeviceAutomationMode(static_cast<size_t>(sender.tag), DeviceAutomationMode::Smart);
+}
+
+- (void)onDeviceModeSchedule:(NSMenuItem*)sender {
+    SetDeviceAutomationMode(static_cast<size_t>(sender.tag), DeviceAutomationMode::Schedule);
 }
 
 - (void)onCheckUpdates:(__unused id)sender {
@@ -361,6 +494,15 @@ void StartAutomationTimers(DuskPlugAppDelegate* delegate) {
                                                                                      : NSControlStateValueOff;
         self.turnOffItem.state = (!automated && g_app.hasKnownState && !g_app.knownOn) ? NSControlStateValueOn
                                                                                        : NSControlStateValueOff;
+    }
+    if (self.smartModeItem) {
+        self.smartModeItem.state = AnyEnabledDeviceUsesMode(DeviceAutomationMode::Smart) ? NSControlStateValueOn
+                                                                                         : NSControlStateValueOff;
+    }
+    if (self.scheduleModeItem) {
+        self.scheduleModeItem.state = AnyEnabledDeviceUsesMode(DeviceAutomationMode::Schedule)
+            ? NSControlStateValueOn
+            : NSControlStateValueOff;
     }
     if (self.lockOffItem) {
         self.lockOffItem.enabled = automated;

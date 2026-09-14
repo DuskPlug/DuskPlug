@@ -44,6 +44,8 @@ GtkWidget* g_menu = nullptr;
 GtkWidget* g_applyUpdateItem = nullptr;
 GtkWidget* g_lockOffItem = nullptr;
 GtkWidget* g_screenBrightnessItem = nullptr;
+GtkWidget* g_smartModeItem = nullptr;
+GtkWidget* g_scheduleModeItem = nullptr;
 
 void UpdateTrayDisplay(bool anyOn, size_t onCount, size_t totalCount);
 void RunPlugAction(bool toggle, bool setOn, bool statusOnly, int deviceIndex = -1);
@@ -198,6 +200,75 @@ void OnSettings(GtkMenuItem*, gpointer) {
     }
 }
 
+bool AnyEnabledDeviceUsesMode(DeviceAutomationMode mode) {
+    for (const auto& device : g_app.config.devices) {
+        if (device.enabled && device.automation.mode == mode) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void PersistConfigToDisk() {
+    SaveAppConfig(g_app.configPath, g_app.config);
+}
+
+void SetEnabledDevicesAutomationMode(DeviceAutomationMode mode) {
+    bool changed = false;
+    for (auto& device : g_app.config.devices) {
+        if (!device.enabled) {
+            continue;
+        }
+        if (device.automation.mode != mode) {
+            device.automation.mode = mode;
+            changed = true;
+        }
+    }
+    if (!changed) {
+        return;
+    }
+
+    SyncLegacyFieldsFromDevices(g_app.config);
+    PersistConfigToDisk();
+    g_app.smart.UpdateConfig(g_app.config);
+    if (g_app.smart.HasAutomatedDevices()) {
+        StartAutomationTimers();
+        g_app.smart.Evaluate();
+    }
+    RebuildMenu();
+}
+
+void SetDeviceAutomationMode(size_t deviceIndex, DeviceAutomationMode mode) {
+    const auto enabledDevices = GetEnabledDevices(g_app.config);
+    if (deviceIndex >= enabledDevices.size()) {
+        return;
+    }
+
+    const std::string& deviceId = enabledDevices[deviceIndex]->id;
+    bool changed = false;
+    for (auto& device : g_app.config.devices) {
+        if (device.id == deviceId && device.enabled) {
+            if (device.automation.mode != mode) {
+                device.automation.mode = mode;
+                changed = true;
+            }
+            break;
+        }
+    }
+    if (!changed) {
+        return;
+    }
+
+    SyncLegacyFieldsFromDevices(g_app.config);
+    PersistConfigToDisk();
+    g_app.smart.UpdateConfig(g_app.config);
+    if (g_app.smart.HasAutomatedDevices()) {
+        StartAutomationTimers();
+        g_app.smart.Evaluate();
+    }
+    RebuildMenu();
+}
+
 void OnTurnOn(GtkMenuItem*, gpointer) {
     RunPlugAction(false, true, false);
 }
@@ -206,9 +277,44 @@ void OnTurnOff(GtkMenuItem*, gpointer) {
     RunPlugAction(false, false, false);
 }
 
-void OnToggleDevice(GtkMenuItem*, gpointer userData) {
+void OnToggleSmartMode(GtkCheckMenuItem* item, gpointer) {
+    if (gtk_check_menu_item_get_active(item)) {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Smart);
+    } else {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Manual);
+    }
+}
+
+void OnToggleScheduleMode(GtkCheckMenuItem* item, gpointer) {
+    if (gtk_check_menu_item_get_active(item)) {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Schedule);
+    } else {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Manual);
+    }
+}
+
+void OnDeviceTurnOn(GtkMenuItem*, gpointer userData) {
     const int deviceIndex = GPOINTER_TO_INT(userData);
-    RunPlugAction(true, false, false, deviceIndex);
+    SetDeviceAutomationMode(static_cast<size_t>(deviceIndex), DeviceAutomationMode::Manual);
+    RunPlugAction(false, true, false, deviceIndex);
+}
+
+void OnDeviceTurnOff(GtkMenuItem*, gpointer userData) {
+    const int deviceIndex = GPOINTER_TO_INT(userData);
+    SetDeviceAutomationMode(static_cast<size_t>(deviceIndex), DeviceAutomationMode::Manual);
+    RunPlugAction(false, false, false, deviceIndex);
+}
+
+void OnDeviceModeManual(GtkMenuItem*, gpointer userData) {
+    SetDeviceAutomationMode(static_cast<size_t>(GPOINTER_TO_INT(userData)), DeviceAutomationMode::Manual);
+}
+
+void OnDeviceModeSmart(GtkMenuItem*, gpointer userData) {
+    SetDeviceAutomationMode(static_cast<size_t>(GPOINTER_TO_INT(userData)), DeviceAutomationMode::Smart);
+}
+
+void OnDeviceModeSchedule(GtkMenuItem*, gpointer userData) {
+    SetDeviceAutomationMode(static_cast<size_t>(GPOINTER_TO_INT(userData)), DeviceAutomationMode::Schedule);
 }
 
 void OnRefresh(GtkMenuItem*, gpointer) {
@@ -311,6 +417,24 @@ void OnToggleScreenBrightness(GtkCheckMenuItem* item, gpointer) {
 
 void OnMenuShow(GtkWidget*, gpointer) {
     const bool automated = g_app.smart.HasAutomatedDevices();
+    const bool smartActive = AnyEnabledDeviceUsesMode(DeviceAutomationMode::Smart);
+    const bool scheduleActive = AnyEnabledDeviceUsesMode(DeviceAutomationMode::Schedule);
+    if (g_smartModeItem) {
+        g_signal_handlers_block_by_func(g_smartModeItem, reinterpret_cast<gpointer>(OnToggleSmartMode), nullptr);
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_smartModeItem), smartActive);
+        g_signal_handlers_unblock_by_func(g_smartModeItem, reinterpret_cast<gpointer>(OnToggleSmartMode), nullptr);
+    }
+    if (g_scheduleModeItem) {
+        g_signal_handlers_block_by_func(
+            g_scheduleModeItem,
+            reinterpret_cast<gpointer>(OnToggleScheduleMode),
+            nullptr);
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_scheduleModeItem), scheduleActive);
+        g_signal_handlers_unblock_by_func(
+            g_scheduleModeItem,
+            reinterpret_cast<gpointer>(OnToggleScheduleMode),
+            nullptr);
+    }
     if (g_lockOffItem) {
         gtk_widget_set_sensitive(g_lockOffItem, automated);
         g_signal_handlers_block_by_func(g_lockOffItem, reinterpret_cast<gpointer>(OnToggleLockOff), nullptr);
@@ -355,6 +479,8 @@ void RebuildMenu() {
         g_menu = nullptr;
         g_lockOffItem = nullptr;
         g_screenBrightnessItem = nullptr;
+        g_smartModeItem = nullptr;
+        g_scheduleModeItem = nullptr;
         g_applyUpdateItem = nullptr;
     }
 
@@ -374,13 +500,41 @@ void RebuildMenu() {
     } else {
         add("Turn all on", G_CALLBACK(OnTurnOn));
         add("Turn all off", G_CALLBACK(OnTurnOff));
+    }
+
+    g_smartModeItem = gtk_check_menu_item_new_with_label("Smart Mode");
+    g_signal_connect(g_smartModeItem, "toggled", G_CALLBACK(OnToggleSmartMode), nullptr);
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), g_smartModeItem);
+    gtk_widget_show(g_smartModeItem);
+
+    if (enabledDevices.size() > 1) {
         gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
         for (size_t i = 0; i < enabledDevices.size(); ++i) {
-            const std::string label = "Toggle " + enabledDevices[i]->name;
-            add(label.c_str(), G_CALLBACK(OnToggleDevice), GINT_TO_POINTER(static_cast<int>(i)));
+            GtkWidget* deviceMenu = gtk_menu_new();
+            GtkWidget* deviceItem = gtk_menu_item_new_with_label(enabledDevices[i]->name.c_str());
+            gtk_menu_item_set_submenu(GTK_MENU_ITEM(deviceItem), deviceMenu);
+            auto addDevice = [&](const char* label, GCallback handler) {
+                GtkWidget* item = gtk_menu_item_new_with_label(label);
+                g_signal_connect(item, "activate", handler, GINT_TO_POINTER(static_cast<int>(i)));
+                gtk_menu_shell_append(GTK_MENU_SHELL(deviceMenu), item);
+                gtk_widget_show(item);
+            };
+            addDevice("Turn On", G_CALLBACK(OnDeviceTurnOn));
+            addDevice("Turn Off", G_CALLBACK(OnDeviceTurnOff));
+            gtk_menu_shell_append(GTK_MENU_SHELL(deviceMenu), gtk_separator_menu_item_new());
+            addDevice("Manual", G_CALLBACK(OnDeviceModeManual));
+            addDevice("Smart", G_CALLBACK(OnDeviceModeSmart));
+            addDevice("Schedule", G_CALLBACK(OnDeviceModeSchedule));
+            gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), deviceItem);
+            gtk_widget_show(deviceItem);
         }
     }
 
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
+    g_scheduleModeItem = gtk_check_menu_item_new_with_label("Schedule Mode");
+    g_signal_connect(g_scheduleModeItem, "toggled", G_CALLBACK(OnToggleScheduleMode), nullptr);
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), g_scheduleModeItem);
+    gtk_widget_show(g_scheduleModeItem);
     gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
     g_lockOffItem = gtk_check_menu_item_new_with_label("Off when locked or sleeping");
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_lockOffItem), TRUE);

@@ -7,6 +7,11 @@ struct SolarTimes {
     int sunsetMinutes = 0;
 };
 
+struct SunPosition {
+    double azimuthDegrees = 0.0;   // 0 = north, 90 = east, clockwise
+    double elevationDegrees = 0.0;   // above horizon
+};
+
 SolarTimes ComputeSolarTimes(
     double latitude,
     double longitude,
@@ -26,3 +31,18 @@ bool IsDarkWithOffsets(
     int darkOffsetMinutes,
     int lightOffsetMinutes,
     SolarTimes* outTimes = nullptr);
+
+SunPosition ComputeSunPosition(
+    double latitude,
+    double longitude,
+    int year,
+    int month,
+    int day,
+    int hour,
+    int minute);
+
+double WindowSunExposure(
+    double sunAzimuth,
+    double sunElevation,
+    double windowAzimuthDegrees,
+    double glareWeight = 0.6);
