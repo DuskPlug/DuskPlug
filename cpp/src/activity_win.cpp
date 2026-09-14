@@ -150,8 +150,11 @@ bool ActivityTracker::Start() {
     trackingStartedMs_ = GetTickCount64();
     unlockRequiresMouse_ = false;
 
+    if (!hwnd_) {
+        return false;
+    }
+
     if (!WTSRegisterSessionNotification(hwnd_, NOTIFY_FOR_THIS_SESSION)) {
-        hwnd_ = nullptr;
         return false;
     }
 
@@ -163,7 +166,6 @@ void ActivityTracker::Stop() {
         WTSUnRegisterSessionNotification(hwnd_);
     }
 
-    hwnd_ = nullptr;
     sessionLocked_ = false;
     lockOffDue_ = false;
     mouseMovedSinceUnlock_ = false;
