@@ -2,6 +2,8 @@
 
 #include "../activity_tracker.h"
 
+#include <cstdint>
+
 class LinuxActivityTracker : public IActivityTracker {
 public:
     void SetLockOffSeconds(int seconds) override;

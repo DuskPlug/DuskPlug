@@ -388,7 +388,7 @@ int main(int argc, char** argv) {
     }
 
     g_app.indicator = app_indicator_new("duskplug", "light-off", APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
-    app_indicator_set_menu(g_app.indicator, BuildMenu());
+    app_indicator_set_menu(g_app.indicator, GTK_MENU(BuildMenu()));
     app_indicator_set_status(g_app.indicator, APP_INDICATOR_STATUS_ACTIVE);
     g_signal_connect(g_app.indicator, "activate", G_CALLBACK(OnActivate), nullptr);
 

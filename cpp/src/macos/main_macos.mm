@@ -45,6 +45,8 @@ struct AppState {
 
 AppState g_app;
 
+void ShowMessage(const std::string& text);
+
 void UpdateApplyMenuItem(DuskPlugAppDelegate* delegate) {
     if (!delegate.applyUpdateItem) {
         return;
