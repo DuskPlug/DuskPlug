@@ -1,5 +1,6 @@
 #include "platform_macos.h"
 
+#import <AppKit/AppKit.h>
 #import <CoreLocation/CoreLocation.h>
 #import <Foundation/Foundation.h>
 
