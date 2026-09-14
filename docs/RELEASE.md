@@ -5,7 +5,7 @@
 1. Bump the single source-of-truth version in [`VERSION`](../VERSION) (semver `major.minor.patch`).
 2. Regenerate the embedded header: `powershell -File scripts\generate-version-h.ps1`
 3. Bump matching versions in [`cpp/macos/Info.plist`](../cpp/macos/Info.plist) and packaging manifests (winget, Scoop). The MSI product version is taken from `VERSION` when you run `Build-Msi.cmd`.
-4. Run tests locally: `cpp\test.cmd`
+4. Run tests locally: `cpp\ci-check.cmd` (Windows; runs both Windows and CMake test paths). On Linux/macOS: build `duskplug_tests` with CMake and run it.
 5. Optional: build MSI locally with `Build-Msi.cmd`
 
 ## Publish

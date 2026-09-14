@@ -18,6 +18,8 @@ release-staging/
 *.ilk
 *.log
 cpp/build/
+cpp/build-ci-check/
+cpp/build-ci-test/
 cpp/obj/
 cpp/DuskPlugTests.exe
 smarttray_config_test.json

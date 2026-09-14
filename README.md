@@ -171,6 +171,14 @@ Or use `scripts/build-linux.sh` / `scripts/build-macos.sh` for release packages.
 cpp\test.cmd
 ```
 
+Before pushing from Windows, run the full CI test matrix locally:
+
+```cmd
+cpp\ci-check.cmd
+```
+
+That runs both `test.cmd` (Windows CI) and the CMake `duskplug_tests` target (Linux/macOS CI), so cross-platform linker gaps are caught before GitHub.
+
 Linux/macOS: `cpp/build/duskplug_tests` after the CMake build above.
 
 ### Project layout

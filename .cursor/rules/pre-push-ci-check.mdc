@@ -1,0 +1,16 @@
+---
+description: Run local CI checks before committing or pushing C++ changes
+alwaysApply: true
+---
+
+# Pre-push CI checks
+
+Before committing or pushing changes that touch `cpp/`, tests, or CI build config:
+
+1. Run `cpp\ci-check.cmd` on Windows (or `powershell -File cpp/ci-check.ps1`).
+2. Fix any failures before commit or push.
+3. When adding or renaming tests, update **both**:
+   - `cpp/test.ps1` (Windows CI via `test.cmd`)
+   - `duskplug_tests` in `cpp/CMakeLists.txt` (Linux/macOS CI)
+
+Windows CI uses `test.ps1`; Linux and macOS CI use CMake `duskplug_tests`. `ci-check` runs both paths so linker and source-list drift is caught locally.

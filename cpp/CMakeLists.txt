@@ -103,6 +103,7 @@ else()
 endif()
 
 enable_testing()
+# Keep this list in sync with cpp/test.ps1 (Windows test runner).
 add_executable(duskplug_tests
     tests/test_main.cpp
     tests/schedule_test.cpp
@@ -113,10 +114,14 @@ add_executable(duskplug_tests
     tests/coords_test.cpp
     tests/semver_test.cpp
     tests/update_checker_test.cpp
+    tests/settings_page_test.cpp
+    tests/tray_menu_test.cpp
+    src/settings_page.cpp
+    src/tray_menu.cpp
 )
 target_include_directories(duskplug_tests PRIVATE src tests)
 target_link_libraries(duskplug_tests PRIVATE duskplug_core)
 if(WIN32)
-    target_link_libraries(duskplug_tests PRIVATE advapi32 shell32 crypt32)
+    target_link_libraries(duskplug_tests PRIVATE winhttp advapi32 shell32 crypt32)
 endif()
 add_test(NAME duskplug_tests COMMAND duskplug_tests)

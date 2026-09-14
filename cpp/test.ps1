@@ -25,6 +25,7 @@ $Gpp = Get-DuskPlugGpp
 $flags = @('-std=c++17', '-O0', '-g', '-Wall', "-I$Src", "-I$Tests")
 & (Join-Path $Root 'scripts\generate-version-h.ps1')
 
+# Keep this list in sync with duskplug_tests in cpp/CMakeLists.txt (Linux/macOS CI).
 $sources = @(
     (Join-Path $Tests 'test_main.cpp'),
     (Join-Path $Tests 'schedule_test.cpp'),
