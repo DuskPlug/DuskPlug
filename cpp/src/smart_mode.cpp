@@ -159,6 +159,47 @@ void SmartModeController::ToggleScreenBrightnessEnabled() {
     SetScreenBrightnessEnabled(!screenBrightnessEnabled_);
 }
 
+bool SmartModeController::IsScreenBrightnessAvailable() const {
+    return brightness_ != nullptr && brightness_->AnyControllable();
+}
+
+int SmartModeController::GetScreenBrightnessPercent() const {
+    if (brightness_) {
+        const int current = brightness_->GetCurrentPercent();
+        if (current >= 0) {
+            return current;
+        }
+    }
+    if (hasAppliedBrightness_ && lastAppliedBrightnessPercent_ >= 0) {
+        return lastAppliedBrightnessPercent_;
+    }
+    return ShouldUseNightBrightness() ? config_.screenBrightnessNight : config_.screenBrightnessDay;
+}
+
+void SmartModeController::SetScreenBrightnessPercent(int percent) {
+    if (!brightness_) {
+        return;
+    }
+
+    percent = ClampScreenBrightnessPercent(percent);
+    brightnessUnavailableNotified_ = false;
+
+    if (!brightnessCaptured_) {
+        brightness_->Capture();
+        brightnessCaptured_ = true;
+    }
+
+    if (brightness_->SetPercent(percent)) {
+        hasAppliedBrightness_ = true;
+        lastAppliedBrightnessPercent_ = percent;
+    } else if (!brightnessUnavailableNotified_ && callbacks_.showSetupMessage) {
+        brightnessUnavailableNotified_ = true;
+        callbacks_.showSetupMessage(
+            "Could not change screen brightness. On laptops, check that no other app is "
+            "controlling brightness. On external monitors, enable DDC/CI in the monitor menu.");
+    }
+}
+
 bool SmartModeController::EnsureLocation(std::string& error, bool promptForLocation) {
     if (!locationService_) {
         error = "Location service unavailable";

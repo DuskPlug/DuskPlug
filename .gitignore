@@ -11,6 +11,7 @@ installer/bin/
 installer/obj/
 release-staging/
 *.o
+*.d
 *.obj
 *.res
 *.pdb
@@ -24,6 +25,7 @@ cpp/third_party/webview2/package/
 cpp/third_party/webview2/include/
 cpp/third_party/webview2/x64/
 WebView2Loader.dll
+libwinpthread-1.dll
 
 # Python
 __pycache__/

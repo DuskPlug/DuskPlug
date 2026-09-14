@@ -13,7 +13,7 @@ cd cpp
 build.cmd
 ```
 
-Produces `DuskPlug.exe` in the project root.
+Produces `DuskPlug.exe` in the project root. Rebuilds are incremental and parallel; default is debug (`-O0`). Pass `-Release` for `-O2`, or `-Clean` to discard cached objects.
 
 ### Linux
 

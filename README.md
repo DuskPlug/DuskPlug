@@ -154,6 +154,8 @@ Build-DuskPlug.cmd
 
 Or `cd cpp` and run `build.cmd`. Produces `DuskPlug.exe` in the project root.
 
+Windows builds are incremental and parallel. The default is a fast **debug** binary (`-O0`). Use `Build-DuskPlug.cmd -Release` for an optimized build. `build.cmd -Clean` discards cached objects.
+
 **Linux / macOS (CMake)**
 
 ```bash

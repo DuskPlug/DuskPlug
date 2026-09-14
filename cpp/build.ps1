@@ -104,13 +104,14 @@ if (-not $Release) { $linkFlags += '-g' }
 
 $libs = @(
     '-lwinhttp', '-ladvapi32', '-lshell32', '-lcomctl32', '-lole32', '-loleaut32', '-luuid',
-    '-luser32', '-lgdi32', '-lwtsapi32', '-lruntimeobject', '-lwindowsapp', '-ldwmapi'
+    '-luser32', '-lgdi32', '-lwtsapi32', '-lruntimeobject', '-lwindowsapp', '-ldwmapi',
+    '-lwbemuuid', '-lPowrProf', '-ldxva2'
 )
 
 $sources = @(
     'main.cpp', 'config.cpp', 'crypto.cpp', 'platform_util.cpp', 'http_win.cpp', 'tuya_client.cpp', 'json_util.cpp',
     'solar.cpp', 'schedule.cpp', 'coords.cpp', 'settings_page.cpp', 'settings_dialog.cpp', 'location_win.cpp', 'location_cli.cpp', 'activity_win.cpp',
-    'location_service_win.cpp', 'brightness_win.cpp', 'smart_mode.cpp', 'semver.cpp', 'install_kind.cpp', 'update_checker.cpp',
+    'location_service_win.cpp', 'brightness_win.cpp', 'tray_brightness_win.cpp', 'tray_menu.cpp', 'smart_mode.cpp', 'semver.cpp', 'install_kind.cpp', 'update_checker.cpp',
     'update_apply_win.cpp'
 ) | ForEach-Object { Join-Path $Src $_ }
 
@@ -135,7 +136,7 @@ foreach ($src in $sources) {
     if ($flagsChanged -or (Test-CppObjectOutdated -ObjectPath $obj -SourcePath $src -DepPath $dep)) {
         $compileJobs += @{
             Name = [IO.Path]::GetFileName($src)
-            Args = $commonFlags + @('-c', $src, '-o', $obj, '-MMD', '-MP', '-MF', $dep)
+            Args = $commonFlags + @('-c', $src, '-o', $obj, '-MMD', '-MF', $dep)
         }
     }
 }
@@ -146,21 +147,22 @@ $objects += $geoObj
 if ($flagsChanged -or (Test-CppObjectOutdated -ObjectPath $geoObj -SourcePath $geoSrc -DepPath $geoDep)) {
     $compileJobs += @{
         Name = [IO.Path]::GetFileName($geoSrc)
-        Args = $geoFlags + @('-c', $geoSrc, '-o', $geoObj, '-MMD', '-MP', '-MF', $geoDep)
+        Args = $geoFlags + @('-c', $geoSrc, '-o', $geoObj, '-MMD', '-MF', $geoDep)
     }
 }
 
 if ($compileJobs.Count -gt 0) {
     Write-Host "Compiling $($compileJobs.Count) file(s)..." -ForegroundColor Cyan
-    Invoke-ParallelNative -FilePath $Gpp -Jobs $compileJobs -MaxJobs $JobCount
+    Invoke-ParallelNative -FilePath $Gpp -Jobs @($compileJobs) -MaxJobs $JobCount
 } else {
     Write-Host 'Objects up to date.' -ForegroundColor DarkGray
 }
 
-$resInputs = @($ResFile, $ResourceH, $Manifest, $AppIcon)
+$VersionH = Join-Path $Src 'version.h'
+$resInputs = @($ResFile, $ResourceH, $Manifest, $AppIcon, $VersionH)
 if (Test-AnyInputNewerThan -OutputPath $ResObj -Inputs $resInputs) {
     Write-Host 'Compiling resources...' -ForegroundColor Cyan
-    & $Windres $ResFile -O coff -o $ResObj
+    & $Windres -I $Src $ResFile -O coff -o $ResObj
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
@@ -183,10 +185,15 @@ if ($needLink) {
 
 Write-FlagStamp -StampPath $stampPath -StampText $stampText
 
+
 Remove-Item -Force -ErrorAction SilentlyContinue @(
     (Join-Path $Src 'location_geolocator.o'),
     (Join-Path $Src 'app_res.o'),
     (Join-Path $Src 'main_test.o')
 )
+
+. (Join-Path $Root 'scripts\verify-duskplug-binary.ps1')
+Copy-DuskPlugRuntimeDlls -Gpp $Gpp -DestDir $Root
+Invoke-DuskPlugBinaryCompatChecks -ExePath $Out -RootDir $Root -Gpp $Gpp -RunSelfTest
 
 Write-Host "Built $Out ($ConfigName)" -ForegroundColor Green

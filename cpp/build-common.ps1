@@ -38,9 +38,7 @@ function Copy-IfChanged {
         [Parameter(Mandatory)][string]$To
     )
     if (Test-Path -LiteralPath $To) {
-        $fromItem = Get-Item -LiteralPath $From
-        $toItem = Get-Item -LiteralPath $To
-        if ($fromItem.Length -eq $toItem.Length -and $fromItem.LastWriteTimeUtc -eq $toItem.LastWriteTimeUtc) {
+        if ((Get-FileHash -LiteralPath $From).Hash -eq (Get-FileHash -LiteralPath $To).Hash) {
             return
         }
     }
@@ -92,11 +90,18 @@ function Test-CppObjectOutdated {
 
     $text = Get-Content -LiteralPath $DepPath -Raw
     if ([string]::IsNullOrWhiteSpace($text)) { return $true }
+    # Join makefile line continuations, then parse only the first rule.
+    # Do not split on the first colon: Windows targets look like C:\path\file.o:
     $text = [regex]::Replace($text, '\\\r?\n', ' ')
-    $deps = [regex]::Replace($text, '^[^:]*:\s*', '')
+    $firstLine = (($text -split '\r?\n') | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1)
+    $marker = $firstLine.IndexOf('.o:')
+    if ($marker -lt 0) { return $true }
+    $deps = $firstLine.Substring($marker + 3)
+    $space = [char]1
+    $deps = $deps.Replace('\ ', [string]$space)
     foreach ($token in ($deps -split '\s+')) {
         if ([string]::IsNullOrWhiteSpace($token)) { continue }
-        $depPath = $token -replace '\\ ', ' '
+        $depPath = $token.Replace([string]$space, ' ').Trim()
         if (-not (Test-Path -LiteralPath $depPath)) { return $true }
         if ((Get-Item -LiteralPath $depPath).LastWriteTimeUtc -gt $objTime) { return $true }
     }
@@ -123,11 +128,12 @@ function Invoke-ParallelNative {
         [Parameter(Mandatory)][object[]]$Jobs,
         [int]$MaxJobs = 1
     )
-    if ($Jobs.Count -eq 0) { return }
+    $jobList = @($Jobs)
+    if ($jobList.Count -eq 0) { return }
     if ($MaxJobs -lt 1) { $MaxJobs = 1 }
 
     $pending = New-Object System.Collections.Queue
-    foreach ($job in $Jobs) { $pending.Enqueue($job) }
+    foreach ($job in $jobList) { $pending.Enqueue($job) }
     $running = New-Object System.Collections.Generic.List[object]
     $failures = New-Object System.Collections.Generic.List[string]
 
@@ -149,6 +155,8 @@ function Invoke-ParallelNative {
             $psi.FileName = $FilePath
             $psi.Arguments = ($job.Args | ForEach-Object { ConvertTo-NativeArg $_ }) -join ' '
             $psi.UseShellExecute = $false
+            $binDir = [IO.Path]::GetDirectoryName($FilePath)
+            $psi.EnvironmentVariables['PATH'] = $binDir + ';' + $psi.EnvironmentVariables['PATH']
             $proc = New-Object System.Diagnostics.Process
             $proc.StartInfo = $psi
             [void]$proc.Start()

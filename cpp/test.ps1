@@ -36,6 +36,7 @@ $sources = @(
     (Join-Path $Tests 'semver_test.cpp'),
     (Join-Path $Tests 'update_checker_test.cpp'),
     (Join-Path $Tests 'settings_page_test.cpp'),
+    (Join-Path $Tests 'tray_menu_test.cpp'),
     (Join-Path $Src 'schedule.cpp'),
     (Join-Path $Src 'json_util.cpp'),
     (Join-Path $Src 'crypto.cpp'),
@@ -43,6 +44,7 @@ $sources = @(
     (Join-Path $Src 'config.cpp'),
     (Join-Path $Src 'coords.cpp'),
     (Join-Path $Src 'settings_page.cpp'),
+    (Join-Path $Src 'tray_menu.cpp'),
     (Join-Path $Src 'platform_util.cpp'),
     (Join-Path $Src 'semver.cpp'),
     (Join-Path $Src 'tuya_client.cpp'),
@@ -66,14 +68,14 @@ foreach ($src in $sources) {
     if ($flagsChanged -or (Test-CppObjectOutdated -ObjectPath $obj -SourcePath $src -DepPath $dep)) {
         $compileJobs += @{
             Name = [IO.Path]::GetFileName($src)
-            Args = $flags + @('-c', $src, '-o', $obj, '-MMD', '-MP', '-MF', $dep)
+            Args = $flags + @('-c', $src, '-o', $obj, '-MMD', '-MF', $dep)
         }
     }
 }
 
 if ($compileJobs.Count -gt 0) {
     Write-Host "Compiling $($compileJobs.Count) file(s)..." -ForegroundColor Cyan
-    Invoke-ParallelNative -FilePath $Gpp -Jobs $compileJobs -MaxJobs $JobCount
+    Invoke-ParallelNative -FilePath $Gpp -Jobs @($compileJobs) -MaxJobs $JobCount
 } else {
     Write-Host 'Objects up to date.' -ForegroundColor DarkGray
 }
@@ -89,10 +91,29 @@ if ($needLink) {
 
 Write-FlagStamp -StampPath $stampPath -StampText $stampText
 
+$Root = Split-Path $CppRoot -Parent
+. (Join-Path $Root 'scripts\verify-duskplug-binary.ps1')
+
 Push-Location $CppRoot
 try {
     & $Out
-    exit $LASTEXITCODE
+    $unitFailures = $LASTEXITCODE
+    if ($unitFailures -ne 0) {
+        exit $unitFailures
+    }
+
+    $exePath = Join-Path $Root 'DuskPlug.exe'
+    if (Test-Path -LiteralPath $exePath) {
+        $compatFailures = Run-DuskPlugBinaryCompatTests -RootDir $Root -Gpp $Gpp -RunSelfTest
+        if ($compatFailures -gt 0) {
+            Write-Host "$compatFailures binary compat test(s) failed." -ForegroundColor Red
+            exit 1
+        }
+    } else {
+        Write-Host 'Skipping binary compat tests (DuskPlug.exe not built yet).' -ForegroundColor DarkGray
+    }
+
+    exit 0
 }
 finally {
     Pop-Location

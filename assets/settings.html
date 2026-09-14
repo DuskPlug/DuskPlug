@@ -154,20 +154,30 @@
 
     function deviceEditorHtml(device, prefix) {
       const isBulb = device.type === "bulb";
+      const modeHint = device.mode === "smart"
+        ? "Smart Mode is on — on at sunset, off at sunrise."
+        : device.mode === "schedule"
+          ? "Schedule Mode is on — uses the ON/OFF times below."
+          : "Manual — control from the tray menu only.";
       return `
         <h2>${prefix === "single" ? "Device" : "Device settings"}</h2>
-        <p class="hint">${prefix === "single" ? "Name, automation, and brightness for your device." : "Configure this device."}</p>
+        <p class="hint">${prefix === "single" ? "Set type to Bulb for dimmable lamps. Smart Mode and Schedule Mode can also be toggled from the tray menu." : "Configure this device."}</p>
         <div class="grid cols-2">
           <label>Name<input data-field="name" value="${device.name || ""}"></label>
           <label>Device ID<input data-field="id" value="${device.id || ""}" ${prefix === "single" ? "" : "readonly"}></label>
-          <label>Type<select data-field="type"><option value="plug" ${device.type === "plug" ? "selected" : ""}>Plug</option><option value="bulb" ${device.type === "bulb" ? "selected" : ""}>Bulb</option></select></label>
-          <label>Automation<select data-field="mode"><option value="manual" ${device.mode === "manual" ? "selected" : ""}>Manual</option><option value="smart" ${device.mode === "smart" ? "selected" : ""}>Smart (dusk/dawn)</option><option value="schedule" ${device.mode === "schedule" ? "selected" : ""}>Schedule</option></select></label>
+          <label>Type<select data-field="type"><option value="plug" ${device.type === "plug" ? "selected" : ""}>Plug</option><option value="bulb" ${device.type === "bulb" ? "selected" : ""}>Smart bulb (dimming)</option></select></label>
+          <label>Automation mode<select data-field="mode"><option value="manual" ${device.mode === "manual" ? "selected" : ""}>Manual</option><option value="smart" ${device.mode === "smart" ? "selected" : ""}>Smart Mode (dusk/dawn)</option><option value="schedule" ${device.mode === "schedule" ? "selected" : ""}>Schedule Mode</option></select></label>
+        </div>
+        <p class="hint" style="margin-top:8px">${modeHint}</p>
+        <div class="grid cols-2" style="margin-top:12px">
           <label>Turn ON at<input data-field="scheduleOnTime" type="time" value="${(device.scheduleOnTime || "18:00").slice(0,5)}"></label>
           <label>Turn OFF at<input data-field="scheduleOffTime" type="time" value="${(device.scheduleOffTime || "23:00").slice(0,5)}"></label>
           <label>After sunset (min)<input data-field="darkOffsetMinutes" type="number" value="${device.darkOffsetMinutes || 0}"></label>
           <label>Before sunrise (min)<input data-field="lightOffsetMinutes" type="number" value="${device.lightOffsetMinutes || 0}"></label>
         </div>
         <div class="grid cols-2 bulb-only ${isBulb ? "" : "hidden"}" style="margin-top:12px">
+          <h2 style="grid-column:1/-1;margin:0">Bulb brightness</h2>
+          <p class="hint" style="grid-column:1/-1;margin:0 0 8px">Used when Smart or Schedule mode turns the bulb on at night or day.</p>
           <label>Night brightness (%)
             <div class="bright-row"><input data-field="nightBrightness" type="range" min="0" max="100" value="${device.nightBrightness || 20}"><output>${device.nightBrightness || 20}</output></div>
           </label>
@@ -183,6 +193,15 @@
           </div>
         </details>
         ${prefix === "detail" ? '<button type="button" class="btn" id="backToList" style="margin-top:12px">← Back to devices</button><button type="button" class="btn" id="removeDevice" style="margin-top:12px;margin-left:8px">Remove device</button>' : ""}
+        ${prefix === "single" ? `
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--card-border)">
+          <h2 style="margin:0 0 4px">Add another device</h2>
+          <p class="hint">Paste another Tuya device ID to control plugs and bulbs together.</p>
+          <div class="row">
+            <label style="flex:2">Device ID<input id="singleNewDeviceId" placeholder="20-character device ID"></label>
+            <button type="button" class="btn" id="singleDiscoverDevice">Add device</button>
+          </div>
+        </div>` : ""}
       `;
     }
 
@@ -211,6 +230,20 @@
         $("backToList").onclick = () => { readEditor(container, index); detailIndex = -1; renderViews(); };
         $("removeDevice").onclick = () => { devices.splice(index, 1); detailIndex = -1; renderViews(); };
       }
+      if (prefix === "single") {
+        const addBtn = $("singleDiscoverDevice");
+        const addInput = $("singleNewDeviceId");
+        if (addBtn && addInput) {
+          addBtn.onclick = () => {
+            const id = addInput.value.trim();
+            if (!id) return showToast("Enter a device ID.", "error");
+            showToast("Discovering device…");
+            postNative({ type: "discoverDevice", deviceId: id });
+          };
+        }
+      }
+      const modeSelect = container.querySelector('[data-field="mode"]');
+      if (modeSelect) modeSelect.addEventListener("change", () => { readEditor(container, index); renderViews(); });
     }
 
     function renderViews() {
@@ -280,8 +313,9 @@
     window.duskplugShowError = (message) => showToast(message || "Something went wrong.", "error");
     window.duskplugApplyDiscovery = (data) => {
       devices.push(Object.assign(defaultDevice(), { id: data.deviceId, name: data.deviceId, type: data.type, switchCode: data.switchCode, brightnessCode: data.brightnessCode || "", brightnessMin: data.brightnessMin || 10, brightnessMax: data.brightnessMax || 1000, useBrightness: data.type === "bulb" }));
-      $("newDeviceId").value = "";
-      showToast("Device added.", "ok");
+      if ($("newDeviceId")) $("newDeviceId").value = "";
+      if ($("singleNewDeviceId")) $("singleNewDeviceId").value = "";
+      showToast((data.type === "bulb" ? "Smart bulb" : "Plug") + " added.", "ok");
       renderViews();
     };
 

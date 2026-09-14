@@ -299,12 +299,12 @@ void ShowWebView2InstallPrompt(HWND owner) {
 }
 
 HMODULE LoadWebView2Loader() {
-    HMODULE module = LoadLibraryW(L"WebView2Loader.dll");
+    const std::wstring path = Utf8ToWide(GetExeDirectory()) + L"\\WebView2Loader.dll";
+    HMODULE module = LoadLibraryW(path.c_str());
     if (module) {
         return module;
     }
-    const std::wstring path = Utf8ToWide(GetExeDirectory()) + L"\\WebView2Loader.dll";
-    return LoadLibraryW(path.c_str());
+    return LoadLibraryW(L"WebView2Loader.dll");
 }
 
 LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -360,12 +360,12 @@ bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& c
     }
 
     const HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    const bool uninitCom = SUCCEEDED(comHr);
+    const bool ownsCom = comHr == S_OK;
 
     HMODULE loader = LoadWebView2Loader();
     if (!loader) {
         ShowWebView2InstallPrompt(owner);
-        if (uninitCom) {
+        if (ownsCom) {
             CoUninitialize();
         }
         return false;
@@ -376,7 +376,7 @@ bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& c
     if (!createEnv) {
         ShowWebView2InstallPrompt(owner);
         FreeLibrary(loader);
-        if (uninitCom) {
+        if (ownsCom) {
             CoUninitialize();
         }
         return false;
@@ -419,7 +419,7 @@ bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& c
         &host);
     if (!hwnd) {
         FreeLibrary(loader);
-        if (uninitCom) {
+        if (ownsCom) {
             CoUninitialize();
         }
         return false;
@@ -441,7 +441,7 @@ bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& c
             DispatchMessageW(&msg);
         }
         FreeLibrary(loader);
-        if (uninitCom) {
+        if (ownsCom) {
             CoUninitialize();
         }
         return false;
@@ -454,7 +454,7 @@ bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& c
     }
 
     FreeLibrary(loader);
-    if (uninitCom) {
+    if (ownsCom) {
         CoUninitialize();
     }
     return host.saved;

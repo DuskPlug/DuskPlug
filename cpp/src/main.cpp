@@ -11,7 +11,11 @@
 #include "install_kind.h"
 #include "update_apply.h"
 #include "update_checker.h"
+#include "tray_brightness_win.h"
+#include "tray_menu.h"
 #include "version.h"
+
+#include <objbase.h>
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0A00
@@ -39,29 +43,33 @@ constexpr UINT WM_DEFER_STARTUP = WM_APP + 4;
 constexpr UINT IDT_POLL = 1001;
 constexpr UINT IDT_SMART = 1002;
 constexpr UINT IDT_LOCK = 1003;
+constexpr UINT ID_MENU_TITLE = 10000;
 constexpr UINT CMD_ON = 10001;
 constexpr UINT CMD_OFF = 10002;
-constexpr UINT CMD_REFRESH = 10003;
 constexpr UINT CMD_EXIT = 10004;
 constexpr UINT CMD_RESTART = 10005;
 constexpr UINT CMD_SETTINGS = 10009;
 constexpr UINT CMD_LOCK_OFF = 10010;
 constexpr UINT CMD_CHECK_UPDATES = 10011;
-constexpr UINT CMD_APPLY_UPDATE = 10012;
-constexpr UINT CMD_SCREEN_BRIGHTNESS = 10013;
+constexpr UINT CMD_SCREEN_BRIGHTNESS_AUTO = 10013;
 constexpr UINT CMD_ON_ALL = 10014;
 constexpr UINT CMD_OFF_ALL = 10015;
+constexpr UINT CMD_SMART_MODE = 10016;
+constexpr UINT CMD_SCHEDULE_MODE = 10017;
 constexpr UINT CMD_DEVICE_BASE = 10200;
 
 struct AppState {
     HWND hwnd = nullptr;
     NOTIFYICONDATAW nid{};
     HMENU menu = nullptr;
+    HMENU brightnessSubMenu = nullptr;
+    UINT brightnessMenuIndex = 0;
     HICON iconOn = nullptr;
     HICON iconOff = nullptr;
     HICON iconSmartOn = nullptr;
     HICON iconSmartOff = nullptr;
     HBITMAP menuTick = nullptr;
+    HICON menuAppIcon = nullptr;
     bool busy = false;
     bool hasKnownState = false;
     bool knownOn = false;
@@ -127,10 +135,9 @@ void RebuildTrayMenu();
 void RunSettings();
 void ApplySettingsReload();
 
-void UpdateApplyMenuItem();
 void HandleUpdateCheckResult(const UpdateInfo& info, bool showNoUpdateMessage);
 void RunUpdateCheck(bool manual);
-void RunApplyUpdate();
+void RunApplyUpdate(bool confirmPrompt);
 void MaybeBackgroundUpdateCheck();
 
 void FinishStartup() {
@@ -289,13 +296,81 @@ void RunPlugAction(bool toggle, bool setOn, bool statusOnly, int deviceIndex) {
     g_app.busy = false;
 }
 
+std::wstring ActiveConfigPath() {
+    return ResolveConfigPathWide(JoinPath(g_app.appDir, L"config.json"));
+}
+
 void ReloadConfigFromDisk() {
-    const std::wstring configPath = ResolveConfigPathWide(JoinPath(g_app.appDir, L"config.json"));
+    const std::wstring configPath = ActiveConfigPath();
     std::wstring configError;
     AppConfig config{};
     if (LoadConfig(configPath, config, configError)) {
         g_app.config = config;
         g_app.smart.UpdateConfig(config);
+    }
+}
+
+void PersistConfigToDisk() {
+    SaveAppConfig(ActiveConfigPath(), g_app.config);
+}
+
+bool AnyEnabledDeviceUsesMode(DeviceAutomationMode mode) {
+    for (const auto& device : g_app.config.devices) {
+        if (device.enabled && device.automation.mode == mode) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void SetEnabledDevicesAutomationMode(DeviceAutomationMode mode) {
+    bool changed = false;
+    for (auto& device : g_app.config.devices) {
+        if (!device.enabled) {
+            continue;
+        }
+        if (device.automation.mode != mode) {
+            device.automation.mode = mode;
+            changed = true;
+        }
+    }
+    if (!changed) {
+        return;
+    }
+
+    SyncLegacyFieldsFromDevices(g_app.config);
+    PersistConfigToDisk();
+    g_app.smart.UpdateConfig(g_app.config);
+
+    if (g_app.smart.HasAutomatedDevices()) {
+        StartAutomationTimers();
+        g_app.smart.Evaluate();
+    } else {
+        UpdateTrayDisplay(g_app.knownOn, g_app.smart.GetKnownOnCount(), g_app.smart.GetEnabledDeviceCount());
+    }
+    RebuildTrayMenu();
+    UpdateContextMenuChecks();
+}
+
+void ToggleSmartModeFromTray() {
+    if (AnyEnabledDeviceUsesMode(DeviceAutomationMode::Smart)) {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Manual);
+        return;
+    }
+    SetEnabledDevicesAutomationMode(DeviceAutomationMode::Smart);
+}
+
+void ToggleScheduleModeFromTray() {
+    if (AnyEnabledDeviceUsesMode(DeviceAutomationMode::Schedule)) {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Manual);
+        return;
+    }
+    SetEnabledDevicesAutomationMode(DeviceAutomationMode::Schedule);
+}
+
+void EnsureManualModeFromTray() {
+    if (g_app.smart.HasAutomatedDevices()) {
+        SetEnabledDevicesAutomationMode(DeviceAutomationMode::Manual);
     }
 }
 
@@ -322,9 +397,18 @@ void RunSettings() {
     ShowSetupBalloon(L"Settings saved.");
 }
 
+int CurrentManualBrightnessPercent() {
+    if (!g_app.brightnessController) {
+        return 50;
+    }
+    return g_app.smart.GetScreenBrightnessPercent();
+}
+
 void RebuildTrayMenu() {
     if (g_app.menu) {
         DestroyMenu(g_app.menu);
+        g_app.menu = nullptr;
+        g_app.brightnessSubMenu = nullptr;
     }
 
     g_app.menu = CreatePopupMenu();
@@ -334,27 +418,50 @@ void RebuildTrayMenu() {
     menuInfo.dwStyle = MNS_CHECKORBMP;
     SetMenuInfo(g_app.menu, &menuInfo);
 
+    AppendMenuW(g_app.menu, MF_OWNERDRAW | MF_GRAYED | MF_DISABLED, ID_MENU_TITLE, nullptr);
+    AppendMenuW(g_app.menu, MF_SEPARATOR, 0, nullptr);
+
     const auto enabledDevices = GetEnabledDevices(g_app.config);
     if (enabledDevices.size() <= 1) {
         AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_ON, L"Turn On");
         AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_OFF, L"Turn Off");
     } else {
-        AppendMenuW(g_app.menu, MF_STRING, CMD_ON_ALL, L"Turn all on");
-        AppendMenuW(g_app.menu, MF_STRING, CMD_OFF_ALL, L"Turn all off");
+        AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_ON_ALL, L"Turn all on");
+        AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_OFF_ALL, L"Turn all off");
+    }
+    AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_SMART_MODE, L"Smart Mode");
+
+    if (enabledDevices.size() > 1) {
         AppendMenuW(g_app.menu, MF_SEPARATOR, 0, nullptr);
         for (size_t i = 0; i < enabledDevices.size(); ++i) {
-            const std::wstring label = L"Toggle " + Utf8ToWide(enabledDevices[i]->name);
+            const DeviceConfig& device = *enabledDevices[i];
+            const std::wstring mode = Utf8ToWide(DeviceAutomationModeToString(device.automation.mode));
+            const std::wstring label = L"Toggle " + Utf8ToWide(device.name) + L" (" + mode + L")";
             AppendMenuW(g_app.menu, MF_STRING, CMD_DEVICE_BASE + static_cast<UINT>(i), label.c_str());
         }
     }
 
     AppendMenuW(g_app.menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_SCHEDULE_MODE, L"Schedule Mode");
     AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_LOCK_OFF, L"Off when locked or sleeping");
-    AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_SCREEN_BRIGHTNESS, L"Adjust screen brightness");
+    g_app.brightnessSubMenu = CreatePopupMenu();
+    AppendMenuW(
+        g_app.brightnessSubMenu,
+        MF_STRING | MF_UNCHECKED,
+        CMD_SCREEN_BRIGHTNESS_AUTO,
+        L"Automatic (night/day)");
+    g_app.brightnessMenuIndex = GetMenuItemCount(g_app.menu);
+    AppendMenuW(
+        g_app.menu,
+        MF_STRING | MF_POPUP,
+        reinterpret_cast<UINT_PTR>(g_app.brightnessSubMenu),
+        L"Screen brightness");
     AppendMenuW(g_app.menu, MF_STRING, CMD_SETTINGS, L"Settings...");
-    AppendMenuW(g_app.menu, MF_STRING, CMD_REFRESH, L"Refresh Status");
     AppendMenuW(g_app.menu, MF_STRING, CMD_CHECK_UPDATES, L"Check for updates...");
-    AppendMenuW(g_app.menu, MF_STRING | MF_GRAYED, CMD_APPLY_UPDATE, L"Update to latest...");
+    {
+        const std::wstring versionLabel = L"v" + Utf8ToWide(DUSKPLUG_VERSION);
+        AppendMenuW(g_app.menu, MF_STRING | MF_GRAYED | MF_DISABLED, 0, versionLabel.c_str());
+    }
     AppendMenuW(g_app.menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(g_app.menu, MF_STRING, CMD_RESTART, L"Restart");
     AppendMenuW(g_app.menu, MF_STRING, CMD_EXIT, L"Exit");
@@ -362,11 +469,18 @@ void RebuildTrayMenu() {
     if (g_app.menuTick) {
         SetMenuItemBitmaps(g_app.menu, CMD_ON, MF_BYCOMMAND, nullptr, g_app.menuTick);
         SetMenuItemBitmaps(g_app.menu, CMD_OFF, MF_BYCOMMAND, nullptr, g_app.menuTick);
+        SetMenuItemBitmaps(g_app.menu, CMD_ON_ALL, MF_BYCOMMAND, nullptr, g_app.menuTick);
+        SetMenuItemBitmaps(g_app.menu, CMD_OFF_ALL, MF_BYCOMMAND, nullptr, g_app.menuTick);
+        SetMenuItemBitmaps(g_app.menu, CMD_SMART_MODE, MF_BYCOMMAND, nullptr, g_app.menuTick);
+        SetMenuItemBitmaps(g_app.menu, CMD_SCHEDULE_MODE, MF_BYCOMMAND, nullptr, g_app.menuTick);
         SetMenuItemBitmaps(g_app.menu, CMD_LOCK_OFF, MF_BYCOMMAND, nullptr, g_app.menuTick);
-        SetMenuItemBitmaps(g_app.menu, CMD_SCREEN_BRIGHTNESS, MF_BYCOMMAND, nullptr, g_app.menuTick);
+        SetMenuItemBitmaps(
+            g_app.brightnessSubMenu,
+            CMD_SCREEN_BRIGHTNESS_AUTO,
+            MF_BYCOMMAND,
+            nullptr,
+            g_app.menuTick);
     }
-
-    UpdateApplyMenuItem();
 }
 
 HBITMAP CreateMenuTickBitmap() {
@@ -394,40 +508,20 @@ HBITMAP CreateMenuTickBitmap() {
     return bmp;
 }
 
-void SetMenuCommandCheck(UINT commandId, bool checked) {
-    if (!g_app.menu) {
+void SetMenuItemCheck(HMENU menu, UINT commandId, bool checked) {
+    if (!menu) {
         return;
     }
 
-    MENUITEMINFOW info{};
-    info.cbSize = sizeof(info);
-    info.fMask = MIIM_STATE;
-    if (!GetMenuItemInfoW(g_app.menu, commandId, FALSE, &info)) {
-        return;
-    }
-
-    if (checked) {
-        info.fState |= MFS_CHECKED;
-    } else {
-        info.fState &= ~MFS_CHECKED;
-    }
-
-    SetMenuItemInfoW(g_app.menu, commandId, FALSE, &info);
+    CheckMenuItem(menu, commandId, MF_BYCOMMAND | (checked ? MF_CHECKED : MF_UNCHECKED));
 }
 
-void UpdateApplyMenuItem() {
-    if (g_app.pendingUpdate.available && SupportsInAppUpdate(g_app.installKind)) {
-        const std::wstring label = L"Update to v" + Utf8ToWide(g_app.pendingUpdate.version) + L"...";
-        ModifyMenuW(g_app.menu, CMD_APPLY_UPDATE, MF_BYCOMMAND | MF_STRING, CMD_APPLY_UPDATE, label.c_str());
-        EnableMenuItem(g_app.menu, CMD_APPLY_UPDATE, MF_ENABLED);
-    } else {
-        EnableMenuItem(g_app.menu, CMD_APPLY_UPDATE, MF_GRAYED);
-    }
+void SetMenuCommandCheck(UINT commandId, bool checked) {
+    SetMenuItemCheck(g_app.menu, commandId, checked);
 }
 
 void HandleUpdateCheckResult(const UpdateInfo& info, bool showNoUpdateMessage) {
     g_app.pendingUpdate = info;
-    UpdateApplyMenuItem();
 
     if (!info.error.empty()) {
         if (showNoUpdateMessage) {
@@ -461,16 +555,29 @@ void HandleUpdateCheckResult(const UpdateInfo& info, bool showNoUpdateMessage) {
     }
 
     if (!SupportsInAppUpdate(g_app.installKind)) {
-        std::string message = "DuskPlug " + info.version + " is available.\n\n" + PackageManagerUpdateHint(g_app.installKind);
-        MessageBoxW(
-            g_app.hwnd,
-            Utf8ToWide(message).c_str(),
-            L"DuskPlug — Updates",
-            MB_ICONINFORMATION | MB_OK);
+        if (showNoUpdateMessage) {
+            std::string message = "DuskPlug " + info.version + " is available.\n\n" + PackageManagerUpdateHint(g_app.installKind);
+            MessageBoxW(
+                g_app.hwnd,
+                Utf8ToWide(message).c_str(),
+                L"DuskPlug — Updates",
+                MB_ICONINFORMATION | MB_OK);
+        }
         return;
     }
 
-    const std::wstring balloon = L"DuskPlug " + Utf8ToWide(info.version) + L" is available. Right-click and choose Update.";
+    if (showNoUpdateMessage) {
+        const std::wstring prompt = L"DuskPlug " + Utf8ToWide(info.version)
+            + L" is available.\n\nDownload and install now?";
+        if (MessageBoxW(g_app.hwnd, prompt.c_str(), L"DuskPlug — Updates", MB_YESNO | MB_ICONQUESTION)
+            == IDYES) {
+            RunApplyUpdate(false);
+        }
+        return;
+    }
+
+    const std::wstring balloon = L"DuskPlug " + Utf8ToWide(info.version)
+        + L" is available. Right-click and choose Check for updates.";
     ShowSetupBalloon(balloon.c_str());
 }
 
@@ -478,14 +585,18 @@ void RunUpdateCheck(bool manual) {
     HandleUpdateCheckResult(CheckForUpdates(g_app.installKind), manual);
 }
 
-void RunApplyUpdate() {
+void RunApplyUpdate(bool confirmPrompt) {
     if (!g_app.pendingUpdate.available || !SupportsInAppUpdate(g_app.installKind)) {
         return;
     }
 
-    const std::wstring prompt = L"Download and install DuskPlug " + Utf8ToWide(g_app.pendingUpdate.version) + L"?";
-    if (MessageBoxW(g_app.hwnd, prompt.c_str(), L"DuskPlug — Updates", MB_YESNO | MB_ICONQUESTION) != IDYES) {
-        return;
+    if (confirmPrompt) {
+        const std::wstring prompt = L"Download and install DuskPlug "
+            + Utf8ToWide(g_app.pendingUpdate.version) + L"?";
+        if (MessageBoxW(g_app.hwnd, prompt.c_str(), L"DuskPlug — Updates", MB_YESNO | MB_ICONQUESTION)
+            != IDYES) {
+            return;
+        }
     }
 
     wcscpy_s(g_app.nid.szTip, L"DuskPlug: updating...");
@@ -518,20 +629,111 @@ void MaybeBackgroundUpdateCheck() {
 }
 
 void UpdateContextMenuChecks() {
-    const bool automated = g_app.smart.HasAutomatedDevices();
+    const bool smartActive = AnyEnabledDeviceUsesMode(DeviceAutomationMode::Smart);
+    const bool scheduleActive = AnyEnabledDeviceUsesMode(DeviceAutomationMode::Schedule);
     const auto enabledDevices = GetEnabledDevices(g_app.config);
+    const size_t onCount = g_app.smart.GetKnownOnCount();
+    const bool lockOffEnabled = g_app.smart.IsLockOffEnabled();
+
     if (enabledDevices.size() <= 1) {
-        SetMenuCommandCheck(CMD_ON, !automated && g_app.hasKnownState && g_app.knownOn);
-        SetMenuCommandCheck(CMD_OFF, !automated && g_app.hasKnownState && !g_app.knownOn);
+        SetMenuCommandCheck(
+            CMD_ON,
+            IsTrayMenuItemChecked(
+                TrayPowerModeItem::On,
+                smartActive,
+                scheduleActive,
+                lockOffEnabled,
+                g_app.hasKnownState,
+                g_app.knownOn,
+                onCount,
+                enabledDevices.size()));
+        SetMenuCommandCheck(
+            CMD_OFF,
+            IsTrayMenuItemChecked(
+                TrayPowerModeItem::Off,
+                smartActive,
+                scheduleActive,
+                lockOffEnabled,
+                g_app.hasKnownState,
+                g_app.knownOn,
+                onCount,
+                enabledDevices.size()));
+    } else {
+        SetMenuCommandCheck(
+            CMD_ON_ALL,
+            IsTrayMenuItemChecked(
+                TrayPowerModeItem::On,
+                smartActive,
+                scheduleActive,
+                lockOffEnabled,
+                g_app.hasKnownState,
+                g_app.knownOn,
+                onCount,
+                enabledDevices.size()));
+        SetMenuCommandCheck(
+            CMD_OFF_ALL,
+            IsTrayMenuItemChecked(
+                TrayPowerModeItem::Off,
+                smartActive,
+                scheduleActive,
+                lockOffEnabled,
+                g_app.hasKnownState,
+                g_app.knownOn,
+                onCount,
+                enabledDevices.size()));
     }
-    SetMenuCommandCheck(CMD_LOCK_OFF, g_app.smart.IsLockOffEnabled());
-    EnableMenuItem(g_app.menu, CMD_LOCK_OFF, automated ? MF_ENABLED : MF_GRAYED);
-    SetMenuCommandCheck(CMD_SCREEN_BRIGHTNESS, g_app.smart.IsScreenBrightnessEnabled());
-    EnableMenuItem(g_app.menu, CMD_SCREEN_BRIGHTNESS, MF_ENABLED);
-    UpdateApplyMenuItem();
+    SetMenuCommandCheck(
+        CMD_SMART_MODE,
+        IsTrayMenuItemChecked(
+            TrayPowerModeItem::Smart,
+            smartActive,
+            scheduleActive,
+            lockOffEnabled,
+            g_app.hasKnownState,
+            g_app.knownOn,
+            onCount,
+            enabledDevices.size()));
+    SetMenuCommandCheck(
+        CMD_SCHEDULE_MODE,
+        IsTrayMenuItemChecked(
+            TrayPowerModeItem::Schedule,
+            smartActive,
+            scheduleActive,
+            lockOffEnabled,
+            g_app.hasKnownState,
+            g_app.knownOn,
+            onCount,
+            enabledDevices.size()));
+    SetMenuCommandCheck(
+        CMD_LOCK_OFF,
+        IsTrayMenuItemChecked(
+            TrayPowerModeItem::LockOff,
+            smartActive,
+            scheduleActive,
+            lockOffEnabled,
+            g_app.hasKnownState,
+            g_app.knownOn,
+            onCount,
+            enabledDevices.size()));
+    EnableMenuItem(g_app.menu, CMD_LOCK_OFF, (smartActive || scheduleActive) ? MF_ENABLED : MF_GRAYED);
+    SetMenuItemCheck(
+        g_app.brightnessSubMenu,
+        CMD_SCREEN_BRIGHTNESS_AUTO,
+        g_app.smart.IsScreenBrightnessEnabled());
+    const bool brightnessAvailable = g_app.brightnessController
+        && g_app.brightnessController->AnyControllable();
+    EnableMenuItem(
+        g_app.menu,
+        g_app.brightnessMenuIndex,
+        MF_BYPOSITION | (brightnessAvailable ? MF_ENABLED : MF_GRAYED));
+    EnableMenuItem(
+        g_app.brightnessSubMenu,
+        CMD_SCREEN_BRIGHTNESS_AUTO,
+        brightnessAvailable ? MF_ENABLED : MF_GRAYED);
 }
 
 void ShowContextMenu() {
+    RunPlugAction(false, false, true);
     UpdateContextMenuChecks();
     POINT pt{};
     GetCursorPos(&pt);
@@ -580,6 +782,11 @@ void RestartApp(HWND hwnd) {
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    LRESULT brightnessResult = 0;
+    if (HandleTrayBrightnessMessage(hwnd, msg, wParam, lParam, brightnessResult)) {
+        return brightnessResult;
+    }
+
     if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
         AddTrayIcon();
         RestoreTrayState();
@@ -644,44 +851,96 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         return 0;
 
+    case WM_MEASUREITEM: {
+        auto* measure = reinterpret_cast<MEASUREITEMSTRUCT*>(lParam);
+        if (!measure || measure->CtlType != ODT_MENU) {
+            break;
+        }
+        if (measure->itemID == ID_MENU_TITLE) {
+            measure->itemWidth = 220;
+            measure->itemHeight = 36;
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_DRAWITEM: {
+        auto* draw = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
+        if (!draw || draw->CtlType != ODT_MENU) {
+            break;
+        }
+        if (draw->itemID == ID_MENU_TITLE) {
+            const RECT& rc = draw->rcItem;
+            FillRect(draw->hDC, &rc, reinterpret_cast<HBRUSH>(COLOR_MENU + 1));
+
+            const int iconSize = 16;
+            const int iconY = rc.top + ((rc.bottom - rc.top - iconSize) / 2);
+            if (g_app.menuAppIcon) {
+                DrawIconEx(draw->hDC, rc.left + 12, iconY, g_app.menuAppIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+            }
+
+            SetBkMode(draw->hDC, TRANSPARENT);
+            SetTextColor(draw->hDC, GetSysColor(COLOR_MENUTEXT));
+            RECT textRect = rc;
+            textRect.left += 12 + iconSize + 8;
+            DrawTextW(draw->hDC, L"DuskPlug", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_INITMENUPOPUP:
+        if (reinterpret_cast<HMENU>(wParam) == g_app.brightnessSubMenu
+            && g_app.brightnessController
+            && g_app.brightnessController->AnyControllable()) {
+            ShowTrayBrightnessSlider(g_app.hwnd, g_app.menu, g_app.brightnessMenuIndex);
+        } else {
+            HideTrayBrightnessSlider();
+        }
+        return 0;
+
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case CMD_ON:
+            EnsureManualModeFromTray();
             RunPlugAction(false, true, false);
             break;
         case CMD_OFF:
+            EnsureManualModeFromTray();
             RunPlugAction(false, false, false);
             break;
         case CMD_ON_ALL:
+            EnsureManualModeFromTray();
             RunPlugAction(false, true, false);
             break;
         case CMD_OFF_ALL:
+            EnsureManualModeFromTray();
             RunPlugAction(false, false, false);
+            break;
+        case CMD_SMART_MODE:
+            ToggleSmartModeFromTray();
+            break;
+        case CMD_SCHEDULE_MODE:
+            ToggleScheduleModeFromTray();
             break;
         case CMD_LOCK_OFF:
             g_app.smart.ToggleLockOffEnabled();
             UpdateContextMenuChecks();
             break;
-        case CMD_SCREEN_BRIGHTNESS: {
+        case CMD_SCREEN_BRIGHTNESS_AUTO: {
             const bool enabling = !g_app.smart.IsScreenBrightnessEnabled();
             g_app.smart.ToggleScreenBrightnessEnabled();
             UpdateContextMenuChecks();
             if (enabling && g_app.smart.IsScreenBrightnessEnabled()) {
-                ShowSetupBalloon(L"Screen brightness adjustment is now on.");
+                ShowSetupBalloon(L"Automatic screen brightness is now on.");
             }
             break;
         }
         case CMD_SETTINGS:
             RunSettings();
             break;
-        case CMD_REFRESH:
-            RunPlugAction(false, false, true);
-            break;
         case CMD_CHECK_UPDATES:
             RunUpdateCheck(true);
-            break;
-        case CMD_APPLY_UPDATE:
-            RunApplyUpdate();
             break;
         case CMD_RESTART:
             RestartApp(hwnd);
@@ -730,6 +989,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (g_app.iconSmartOff) {
             DestroyIcon(g_app.iconSmartOff);
         }
+        if (g_app.menuAppIcon) {
+            DestroyIcon(g_app.menuAppIcon);
+        }
         if (g_app.menu) {
             DestroyMenu(g_app.menu);
             g_app.menu = nullptr;
@@ -738,6 +1000,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             DeleteObject(g_app.menuTick);
             g_app.menuTick = nullptr;
         }
+        ShutdownTrayBrightnessUi();
         PostQuitMessage(0);
         return 0;
     }
@@ -753,6 +1016,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv) {
         for (int i = 1; i < argc; ++i) {
+            if (_wcsicmp(argv[i], L"--self-test") == 0) {
+                LocalFree(argv);
+                return 0;
+            }
             if (_wcsicmp(argv[i], L"--get-location") == 0) {
                 const int rc = RunGetLocationMode();
                 LocalFree(argv);
@@ -766,6 +1033,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     }
 
     SetAppUserModelId();
+
+    const HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    const bool ownsCom = comHr == S_OK;
 
     INITCOMMONCONTROLSEX icc{};
     icc.dwSize = sizeof(icc);
@@ -811,6 +1081,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     }
     if (!g_app.iconSmartOff) {
         g_app.iconSmartOff = CopyIcon(g_app.iconOff);
+    }
+
+    const std::wstring appIconPath = JoinPath(g_app.appDir, L"assets\\app.ico");
+    g_app.menuAppIcon = static_cast<HICON>(LoadImageW(
+        nullptr,
+        appIconPath.c_str(),
+        IMAGE_ICON,
+        16,
+        16,
+        LR_LOADFROMFILE));
+    if (!g_app.menuAppIcon) {
+        g_app.menuAppIcon = CopyIcon(g_app.iconOff);
     }
 
     WNDCLASSEXW wc{};
@@ -860,6 +1142,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     g_app.menuTick = CreateMenuTickBitmap();
     RebuildTrayMenu();
 
+    TrayBrightnessCallbacks brightnessCallbacks{};
+    brightnessCallbacks.isAvailable = []() {
+        return g_app.brightnessController && g_app.brightnessController->AnyControllable();
+    };
+    brightnessCallbacks.getPercent = []() { return CurrentManualBrightnessPercent(); };
+    brightnessCallbacks.setPercent = [](int percent) {
+        g_app.smart.SetScreenBrightnessPercent(percent);
+    };
     if (!IsConfigComplete(g_app.config)) {
         if (openSettingsOnStart) {
             RunSettings();
@@ -873,6 +1163,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     g_app.locationService = CreateWinLocationService(g_app.hwnd, g_app.appDir);
     g_app.activityTracker = CreateWinActivityTracker(g_app.hwnd);
     g_app.brightnessController = CreateWinBrightnessController();
+    InitTrayBrightnessUi(g_app.hwnd, brightnessCallbacks);
 
     if (IsConfigComplete(g_app.config)) {
         g_app.client = std::make_unique<TuyaClient>(g_app.config);
@@ -906,6 +1197,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 
     if (g_mutex) {
         CloseHandle(g_mutex);
+    }
+
+    if (ownsCom) {
+        CoUninitialize();
     }
 
     return static_cast<int>(message.wParam);

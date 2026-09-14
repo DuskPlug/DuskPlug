@@ -65,6 +65,9 @@ public:
     void ToggleLockOffEnabled();
     void SetScreenBrightnessEnabled(bool enabled);
     void ToggleScreenBrightnessEnabled();
+    bool IsScreenBrightnessAvailable() const;
+    int GetScreenBrightnessPercent() const;
+    void SetScreenBrightnessPercent(int percent);
 
     bool SetDeviceSwitch(const DeviceConfig& device, bool on, std::string& error);
     bool ToggleDevice(const DeviceConfig& device, std::string& error, bool& newState);

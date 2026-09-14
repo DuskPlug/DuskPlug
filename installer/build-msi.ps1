@@ -19,8 +19,17 @@ if (-not $dotnet) {
     throw 'dotnet SDK is required to build the MSI (winget install Microsoft.DotNet.SDK.8)'
 }
 
-Write-Host 'Building DuskPlug.msi...' -ForegroundColor Cyan
-& $dotnet.Source build (Join-Path $PSScriptRoot 'DuskPlug.wixproj') -c Release
+$versionFile = Join-Path $Root 'VERSION'
+if (-not (Test-Path -LiteralPath $versionFile)) {
+    throw "Missing VERSION file at $versionFile"
+}
+$version = (Get-Content -LiteralPath $versionFile -Raw).Trim()
+if ($version -notmatch '^\d+\.\d+\.\d+$') {
+    throw "VERSION must be semver major.minor.patch, got: $version"
+}
+
+Write-Host "Building DuskPlug.msi ($version)..." -ForegroundColor Cyan
+& $dotnet.Source build (Join-Path $PSScriptRoot 'DuskPlug.wixproj') -c Release "-p:ProductVersion=$version"
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

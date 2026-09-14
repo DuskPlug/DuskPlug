@@ -5,6 +5,8 @@
     <OutputName>DuskPlug</OutputName>
     <OutputPath>$(MSBuildThisFileDirectory)bin\</OutputPath>
     <IntermediateOutputPath>$(MSBuildThisFileDirectory)obj\</IntermediateOutputPath>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+    <DefineConstants>ProductVersion=$(ProductVersion);$(DefineConstants)</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />

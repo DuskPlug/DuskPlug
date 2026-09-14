@@ -20,7 +20,7 @@ call "%VCVARS%" >nul
 if errorlevel 1 exit /b 1
 
 set "RES=%SRC%\app_res.res"
-"%KIT%\bin\%SDK%\x64\rc.exe" /nologo /fo "%RES%" "%SRC%\app.rc"
+"%KIT%\bin\%SDK%\x64\rc.exe" /nologo /i "%SRC%" /fo "%RES%" "%SRC%\app.rc"
 if errorlevel 1 exit /b 1
 
 cl /nologo /EHsc /std:c++17 /O2 /DUNICODE /D_UNICODE ^

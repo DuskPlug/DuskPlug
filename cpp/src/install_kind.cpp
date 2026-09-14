@@ -11,6 +11,7 @@
 #endif
 #include <windows.h>
 #include <shlobj.h>
+#include <cwchar>
 #endif
 
 namespace {
@@ -30,19 +31,85 @@ bool ContainsIgnoreCase(const std::string& haystack, const std::string& needle) 
         != haystack.end();
 }
 
+bool UninstallKeyLooksLikeDuskPlugMsi(HKEY parent, const wchar_t* subKeyName) {
+    HKEY sub = nullptr;
+    if (RegOpenKeyExW(parent, subKeyName, 0, KEY_READ, &sub) != ERROR_SUCCESS) {
+        return false;
+    }
+
+    wchar_t displayName[256]{};
+    DWORD displaySize = sizeof(displayName);
+    DWORD type = 0;
+    const bool isDuskPlug = RegQueryValueExW(
+                                sub,
+                                L"DisplayName",
+                                nullptr,
+                                &type,
+                                reinterpret_cast<LPBYTE>(displayName),
+                                &displaySize)
+            == ERROR_SUCCESS
+        && type == REG_SZ
+        && _wcsicmp(displayName, L"DuskPlug") == 0;
+
+    wchar_t uninstallString[512]{};
+    DWORD uninstallSize = sizeof(uninstallString);
+    const bool isMsi = RegQueryValueExW(
+                           sub,
+                           L"UninstallString",
+                           nullptr,
+                           &type,
+                           reinterpret_cast<LPBYTE>(uninstallString),
+                           &uninstallSize)
+            == ERROR_SUCCESS
+        && type == REG_SZ
+        && (wcsstr(uninstallString, L"msiexec") != nullptr || wcsstr(uninstallString, L"MsiExec") != nullptr);
+
+    RegCloseKey(sub);
+    return isDuskPlug && isMsi;
+}
+
+bool HiveHasDuskPlugMsi(HKEY root, REGSAM wow) {
+    HKEY uninstall = nullptr;
+    if (RegOpenKeyExW(
+            root,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+            0,
+            KEY_READ | wow,
+            &uninstall)
+        != ERROR_SUCCESS) {
+        return false;
+    }
+
+    wchar_t name[256];
+    for (DWORD i = 0;; ++i) {
+        DWORD nameLen = 256;
+        if (RegEnumKeyExW(uninstall, i, name, &nameLen, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) {
+            break;
+        }
+        if (UninstallKeyLooksLikeDuskPlugMsi(uninstall, name)) {
+            RegCloseKey(uninstall);
+            return true;
+        }
+    }
+    RegCloseKey(uninstall);
+    return false;
+}
+
 bool IsMsiInstalled() {
-    constexpr const wchar_t* kUninstallKey =
+    constexpr const wchar_t* kLegacyUninstallKey =
         L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{89E986DB-8F9D-41AA-9F37-862A15944D0A}";
     HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kUninstallKey, 0, KEY_READ | KEY_WOW64_64KEY, &key) == ERROR_SUCCESS) {
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kLegacyUninstallKey, 0, KEY_READ | KEY_WOW64_64KEY, &key) == ERROR_SUCCESS) {
         RegCloseKey(key);
         return true;
     }
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kUninstallKey, 0, KEY_READ, &key) == ERROR_SUCCESS) {
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kLegacyUninstallKey, 0, KEY_READ, &key) == ERROR_SUCCESS) {
         RegCloseKey(key);
         return true;
     }
-    return false;
+    return HiveHasDuskPlugMsi(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY)
+        || HiveHasDuskPlugMsi(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY)
+        || HiveHasDuskPlugMsi(HKEY_CURRENT_USER, 0);
 }
 
 bool IsUnderProgramFiles(const std::string& path) {

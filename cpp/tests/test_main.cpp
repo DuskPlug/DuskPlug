@@ -9,6 +9,7 @@ void RunCoordsTests();
 void RunSemverTests();
 void RunUpdateCheckerTests();
 void RunSettingsPageTests();
+void RunTrayMenuTests();
 
 int main() {
     RunScheduleTests();
@@ -20,6 +21,7 @@ int main() {
     RunSemverTests();
     RunUpdateCheckerTests();
     RunSettingsPageTests();
+    RunTrayMenuTests();
 
     if (g_testFailures == 0) {
         std::printf("\nAll tests passed.\n");

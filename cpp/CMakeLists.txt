@@ -35,6 +35,9 @@ target_include_directories(duskplug_core PUBLIC src)
 
 if(WIN32)
     target_sources(duskplug_core PRIVATE src/http_win.cpp)
+    if(MINGW)
+        set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS} --include-dir=${CMAKE_SOURCE_DIR}/src")
+    endif()
     add_executable(DuskPlug WIN32
         src/main.cpp
         src/settings_dialog.cpp
@@ -47,7 +50,7 @@ if(WIN32)
         src/app.rc
     )
     target_sources(duskplug_core PRIVATE src/update_apply_win.cpp)
-    target_link_libraries(DuskPlug PRIVATE duskplug_core winhttp advapi32 shell32 comctl32 ole32 user32 gdi32 wtsapi32)
+    target_link_libraries(DuskPlug PRIVATE duskplug_core winhttp advapi32 shell32 comctl32 ole32 oleaut32 uuid user32 gdi32 wtsapi32 wbemuuid PowrProf dxva2)
     set_target_properties(DuskPlug PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
     )

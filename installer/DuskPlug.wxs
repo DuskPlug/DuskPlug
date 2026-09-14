@@ -4,12 +4,14 @@
   <Package
       Name="DuskPlug"
       Manufacturer="DuskPlug"
-      Version="1.0.2"
+      Version="$(var.ProductVersion)"
       UpgradeCode="8F3C2A91-7B4E-4D16-A9E2-1C5B8F0D3A27"
       Compressed="yes">
     <SummaryInformation Description="Tray app to control a Tuya smart plug" />
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of DuskPlug is already installed." />
+    <MajorUpgrade
+        AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of DuskPlug is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <Icon Id="DuskPlug.exe" SourceFile="..\assets\app.ico" />
@@ -60,6 +62,9 @@
       </Component>
       <Component>
         <File Source="..\WebView2Loader.dll" />
+      </Component>
+      <Component>
+        <File Source="..\libwinpthread-1.dll" />
       </Component>
       <Component>
         <File Source="..\LICENSE" />
