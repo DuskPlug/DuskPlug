@@ -128,6 +128,54 @@ bool JsonGetSuccess(const std::string& json) {
     return false;
 }
 
+std::optional<std::string> JsonGetObjectSlice(const std::string& json, const std::string& key) {
+    const auto keyPos = FindJsonKey(json, key);
+    if (!keyPos) {
+        return std::nullopt;
+    }
+
+    size_t pos = *keyPos + key.size() + 2;
+    SkipJsonWhitespace(json, pos);
+    if (pos >= json.size() || json[pos] != ':') {
+        return std::nullopt;
+    }
+    ++pos;
+    SkipJsonWhitespace(json, pos);
+    if (pos >= json.size() || json[pos] != '{') {
+        return std::nullopt;
+    }
+
+    size_t depth = 0;
+    const size_t start = pos;
+    for (; pos < json.size(); ++pos) {
+        if (json[pos] == '{') {
+            ++depth;
+        } else if (json[pos] == '}') {
+            --depth;
+            if (depth == 0) {
+                break;
+            }
+        }
+    }
+
+    if (pos >= json.size()) {
+        return std::nullopt;
+    }
+
+    return json.substr(start, pos - start + 1);
+}
+
+std::optional<std::string> JsonGetAssetField(
+    const std::string& json,
+    const std::string& assetKey,
+    const std::string& fieldKey) {
+    const auto assets = JsonGetObjectSlice(json, "assets");
+    if (!assets) {
+        return std::nullopt;
+    }
+    return JsonGetNestedString(*assets, assetKey, fieldKey);
+}
+
 std::optional<std::string> JsonGetNestedString(const std::string& json, const std::string& parentKey, const std::string& childKey) {
     const auto keyPos = FindJsonKey(json, parentKey);
     if (!keyPos) {

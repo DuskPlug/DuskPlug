@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=DuskPlug
+Comment=Control a Tuya smart plug from the system tray
+Exec=duskplug
+Icon=light-off
+Terminal=false
+Categories=Utility;

@@ -2,9 +2,11 @@
 
 ## Before tagging
 
-1. Bump `Version` in [`installer/DuskPlug.wxs`](../installer/DuskPlug.wxs) to match the new tag.
-2. Run tests locally: `cpp\test.cmd`
-3. Optional: build MSI locally with `Build-Msi.cmd`
+1. Bump the single source-of-truth version in [`VERSION`](../VERSION) (semver `major.minor.patch`).
+2. Regenerate the embedded header: `powershell -File scripts\generate-version-h.ps1`
+3. Bump matching versions in [`installer/DuskPlug.wxs`](../installer/DuskPlug.wxs), [`cpp/macos/Info.plist`](../cpp/macos/Info.plist), and packaging manifests (winget, Scoop).
+4. Run tests locally: `cpp\test.cmd`
+5. Optional: build MSI locally with `Build-Msi.cmd`
 
 ## Publish
 
@@ -13,8 +15,9 @@
    git tag -a v1.0.1 -m "v1.0.1"
    git push origin v1.0.1
    ```
-2. GitHub Actions ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs tests, builds `DuskPlug.exe`, `DuskPlug.msi`, and `DuskPlug-Windows.zip`, then uploads them to the GitHub release.
+2. GitHub Actions ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs tests, builds `DuskPlug.exe`, `DuskPlug.msi`, `DuskPlug-Windows.zip`, Linux and macOS packages, then uploads them to the GitHub release.
 3. If SignPath secrets are configured, the release job submits binaries for Authenticode signing before upload.
+4. The `release-manifest` job computes SHA256 for each asset and uploads **`latest.json`** to the same release. In-app updaters fetch it from `https://github.com/DuskPlug/DuskPlug/releases/latest/download/latest.json`.
 
 ## After the release
 

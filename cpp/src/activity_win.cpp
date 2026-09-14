@@ -72,11 +72,11 @@ void ActivityTracker::SetLockOffSeconds(int seconds) {
     lockOffSeconds_ = seconds > 0 ? seconds : 30;
 }
 
-void ActivityTracker::SetLockOffCallback(LockOffCallback onLockOffDue) {
+void ActivityTracker::SetLockOffCallback(std::function<void()> onLockOffDue) {
     onLockOffDue_ = std::move(onLockOffDue);
 }
 
-void ActivityTracker::SetLockActivityCallback(LockOffCallback onLockActivity) {
+void ActivityTracker::SetLockActivityCallback(std::function<void()> onLockActivity) {
     onLockActivity_ = std::move(onLockActivity);
 }
 
@@ -145,9 +145,8 @@ SessionTransition ActivityTracker::PollSessionLockState() {
     return SessionTransition::None;
 }
 
-bool ActivityTracker::Start(HWND hwnd) {
-    Stop(hwnd);
-    hwnd_ = hwnd;
+bool ActivityTracker::Start() {
+    Stop();
     trackingStartedMs_ = GetTickCount64();
     unlockRequiresMouse_ = false;
 
@@ -159,7 +158,7 @@ bool ActivityTracker::Start(HWND hwnd) {
     return true;
 }
 
-void ActivityTracker::Stop(HWND) {
+void ActivityTracker::Stop() {
     if (hwnd_) {
         WTSUnRegisterSessionNotification(hwnd_);
     }
@@ -177,19 +176,27 @@ void ActivityTracker::ClearMouseMovedFlag() {
     mouseMovedSinceUnlock_ = false;
 }
 
+void ActivityTracker::OnSessionLock() {
+    sessionLocked_ = true;
+    lockOffDue_ = false;
+    inputBaselineTick_ = 0;
+}
+
+void ActivityTracker::OnSessionUnlock() {
+    sessionLocked_ = false;
+    lockOffDue_ = false;
+    mouseMovedSinceUnlock_ = false;
+    inputBaselineTick_ = CurrentInputTick();
+}
+
 void ActivityTracker::HandleSessionChange(WPARAM event) {
     if (event == WTS_SESSION_LOCK) {
-        sessionLocked_ = true;
-        lockOffDue_ = false;
-        inputBaselineTick_ = 0;
+        OnSessionLock();
         return;
     }
 
     if (event == WTS_SESSION_UNLOCK) {
-        sessionLocked_ = false;
-        lockOffDue_ = false;
-        mouseMovedSinceUnlock_ = false;
-        inputBaselineTick_ = CurrentInputTick();
+        OnSessionUnlock();
     }
 }
 

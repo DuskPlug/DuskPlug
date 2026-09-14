@@ -1,5 +1,7 @@
 #pragma once
 
+#include "activity_tracker.h"
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -7,33 +9,29 @@
 
 #include <functional>
 
-enum class SessionTransition {
-    None,
-    Locked,
-    Unlocked,
-};
-
-class ActivityTracker {
+class ActivityTracker : public IActivityTracker {
 public:
-    using LockOffCallback = std::function<void()>;
+    void SetLockOffSeconds(int seconds) override;
+    void SetLockOffCallback(std::function<void()> onLockOffDue) override;
+    void SetLockActivityCallback(std::function<void()> onLockActivity) override;
 
-    void SetLockOffSeconds(int seconds);
-    void SetLockOffCallback(LockOffCallback onLockOffDue);
-    void SetLockActivityCallback(LockOffCallback onLockActivity);
+    bool Start() override;
+    void Stop() override;
+    void SetWindow(HWND hwnd) { hwnd_ = hwnd; }
 
-    bool Start(HWND hwnd);
-    void Stop(HWND hwnd);
+    bool IsSessionLocked() const override { return sessionLocked_; }
+    bool IsLockOffDue() const override { return lockOffDue_; }
+    bool HasMouseMovedSinceUnlock() const override { return mouseMovedSinceUnlock_; }
+    bool UnlockRequiresMouse() const override { return unlockRequiresMouse_; }
 
-    bool IsSessionLocked() const { return sessionLocked_; }
-    bool IsLockOffDue() const { return lockOffDue_; }
-    bool HasMouseMovedSinceUnlock() const { return mouseMovedSinceUnlock_; }
-    bool UnlockRequiresMouse() const { return unlockRequiresMouse_; }
+    void ClearMouseMovedFlag() override;
+    void ClearUnlockRequiresMouse() override { unlockRequiresMouse_ = false; }
+    void OnSessionLock() override;
+    void OnSessionUnlock() override;
+    SessionTransition HandleLockTimerTick() override;
+    void PollInputActivity() override;
 
-    void ClearMouseMovedFlag();
-    void ClearUnlockRequiresMouse() { unlockRequiresMouse_ = false; }
     void HandleSessionChange(WPARAM event);
-    SessionTransition HandleLockTimerTick();
-    void PollInputActivity();
 
 private:
     static bool IsWorkstationLocked();
@@ -50,6 +48,6 @@ private:
     ULONGLONG trackingStartedMs_ = 0;
     DWORD inputBaselineTick_ = 0;
     bool unlockRequiresMouse_ = false;
-    LockOffCallback onLockOffDue_;
-    LockOffCallback onLockActivity_;
+    std::function<void()> onLockOffDue_;
+    std::function<void()> onLockActivity_;
 };

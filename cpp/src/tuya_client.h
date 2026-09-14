@@ -29,5 +29,5 @@ private:
     static std::string CountdownCodeFromSwitch(const std::string& switchCode);
     static std::string NewNonce();
     static std::string CurrentTimestampMs();
-    static std::wstring BuildUrl(const std::string& baseUrl, const std::string& path);
+    static std::string BuildUrl(const std::string& baseUrl, const std::string& path);
 };

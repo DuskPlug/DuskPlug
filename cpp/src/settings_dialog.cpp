@@ -1,4 +1,5 @@
 #include "settings_dialog.h"
+#include "coords.h"
 #include "location_win.h"
 #include "resource.h"
 #include "schedule.h"
@@ -7,6 +8,10 @@
 
 #include <cstdlib>
 #include <string>
+
+#ifndef EM_SETCUEBANNER
+#define EM_SETCUEBANNER 0x1501
+#endif
 
 namespace {
 
@@ -107,6 +112,50 @@ bool ParseDoubleValue(const std::wstring& text, double& out) {
     return end != text.c_str() && (end == nullptr || *end == L'\0');
 }
 
+void SetCoordinateFields(HWND dlg, double latitude, double longitude) {
+    wchar_t buffer[64];
+    swprintf_s(buffer, L"%.6f", latitude);
+    SetDlgItemTextW(dlg, IDC_SET_LATITUDE, buffer);
+    swprintf_s(buffer, L"%.6f", longitude);
+    SetDlgItemTextW(dlg, IDC_SET_LONGITUDE, buffer);
+}
+
+bool ApplyPastedCoordinates(HWND dlg, bool showError) {
+    const std::string text = GetDlgItemTextUtf8(dlg, IDC_SET_PASTE_COORDS);
+    double latitude = 0.0;
+    double longitude = 0.0;
+    if (!ParseLatLonPair(text, latitude, longitude)) {
+        if (showError) {
+            MessageBoxW(
+                dlg,
+                L"Paste a Google Maps pair such as:\n"
+                L"51.48096831196373, -3.209212141442959\n\n"
+                L"You can also paste a Google Maps link.",
+                L"DuskPlug — Settings",
+                MB_ICONWARNING | MB_OK);
+        }
+        return false;
+    }
+
+    SetCoordinateFields(dlg, latitude, longitude);
+    return true;
+}
+
+bool ParseCoordinatesFromDialog(HWND dlg, double& latitude, double& longitude) {
+    const std::wstring pasteText = GetDlgItemTextWide(dlg, IDC_SET_PASTE_COORDS);
+    if (!pasteText.empty() && ParseLatLonPair(WideToUtf8(pasteText), latitude, longitude)) {
+        return true;
+    }
+
+    const std::wstring latText = GetDlgItemTextWide(dlg, IDC_SET_LATITUDE);
+    if (latText.find(L',') != std::wstring::npos && ParseLatLonPair(WideToUtf8(latText), latitude, longitude)) {
+        return true;
+    }
+
+    return ParseDoubleValue(latText, latitude)
+        && ParseDoubleValue(GetDlgItemTextWide(dlg, IDC_SET_LONGITUDE), longitude);
+}
+
 void PopulateDataCenters(HWND combo) {
     SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Central Europe (UK / most EU)"));
     SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Western Europe"));
@@ -128,9 +177,9 @@ void LoadSettingsIntoDialog(HWND dlg, const AppConfig& config) {
     }
 
     wchar_t buffer[64];
-    swprintf_s(buffer, L"%.4f", config.latitude);
+    swprintf_s(buffer, L"%.6f", config.latitude);
     SetDlgItemTextW(dlg, IDC_SET_LATITUDE, buffer);
-    swprintf_s(buffer, L"%.4f", config.longitude);
+    swprintf_s(buffer, L"%.6f", config.longitude);
     SetDlgItemTextW(dlg, IDC_SET_LONGITUDE, buffer);
     swprintf_s(buffer, L"%d", config.darkOffsetMinutes);
     SetDlgItemTextW(dlg, IDC_SET_DARK_OFFSET, buffer);
@@ -178,11 +227,10 @@ bool CollectSettingsFromDialog(HWND dlg, AppConfig& config) {
 
     double latitude = 0.0;
     double longitude = 0.0;
-    if (!ParseDoubleValue(GetDlgItemTextWide(dlg, IDC_SET_LATITUDE), latitude)
-        || !ParseDoubleValue(GetDlgItemTextWide(dlg, IDC_SET_LONGITUDE), longitude)) {
+    if (!ParseCoordinatesFromDialog(dlg, latitude, longitude)) {
         MessageBoxW(
             dlg,
-            L"Enter valid latitude and longitude values, or use Detect Location.",
+            L"Enter valid latitude and longitude, paste a Google Maps pair, or use Detect Location.",
             L"DuskPlug — Settings",
             MB_ICONWARNING | MB_OK);
         return false;
@@ -258,6 +306,15 @@ INT_PTR CALLBACK SettingsDialogProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         if (state && state->config) {
             LoadSettingsIntoDialog(hwnd, *state->config);
         }
+
+        const HWND pasteCoords = GetDlgItem(hwnd, IDC_SET_PASTE_COORDS);
+        if (pasteCoords) {
+            SendMessageW(
+                pasteCoords,
+                EM_SETCUEBANNER,
+                TRUE,
+                reinterpret_cast<LPARAM>(L"51.4809, -3.2092"));
+        }
         return TRUE;
     }
 
@@ -282,13 +339,28 @@ INT_PTR CALLBACK SettingsDialogProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 return TRUE;
             }
 
-            wchar_t buffer[64];
-            swprintf_s(buffer, L"%.4f", latitude);
-            SetDlgItemTextW(hwnd, IDC_SET_LATITUDE, buffer);
-            swprintf_s(buffer, L"%.4f", longitude);
-            SetDlgItemTextW(hwnd, IDC_SET_LONGITUDE, buffer);
+            SetCoordinateFields(hwnd, latitude, longitude);
             return TRUE;
         }
+        case IDC_SET_APPLY_COORDS:
+            ApplyPastedCoordinates(hwnd, true);
+            return TRUE;
+        case IDC_SET_PASTE_COORDS:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                ApplyPastedCoordinates(hwnd, false);
+            }
+            return TRUE;
+        case IDC_SET_LATITUDE:
+            if (HIWORD(wParam) == EN_CHANGE) {
+                const std::wstring latText = GetDlgItemTextWide(hwnd, IDC_SET_LATITUDE);
+                double latitude = 0.0;
+                double longitude = 0.0;
+                if (latText.find(L',') != std::wstring::npos
+                    && ParseLatLonPair(WideToUtf8(latText), latitude, longitude)) {
+                    SetCoordinateFields(hwnd, latitude, longitude);
+                }
+            }
+            return TRUE;
         case IDOK: {
             if (!state || !state->config) {
                 EndDialog(hwnd, IDCANCEL);

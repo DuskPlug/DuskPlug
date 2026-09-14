@@ -1,4 +1,5 @@
 #pragma once
+
 #include <string>
 
 struct AppConfig {
@@ -19,13 +20,24 @@ struct AppConfig {
     bool hasScheduleTimes = false;
 };
 
-std::wstring GetConfigPath();
-std::wstring ResolveConfigPath(const std::wstring& legacyAdjacentPath);
-bool EnsureConfigFile(const std::wstring& path);
+bool EnsureConfigFile(const std::string& path);
 bool IsConfigComplete(const AppConfig& config);
+bool LoadConfig(const std::string& path, AppConfig& out, std::string& error, bool requireCredentials = true);
+bool SaveAppConfig(const std::string& path, const AppConfig& config);
+bool SaveCoordinatesToConfig(const std::string& path, double latitude, double longitude);
+bool SaveScheduleToConfig(const std::string& path, const std::string& onTime, const std::string& offTime);
+int BaseUrlToDataCenterIndex(const std::string& baseUrl);
+std::string DataCenterIndexToBaseUrl(int index);
+
+#ifdef _WIN32
+#include <string>
+
+std::wstring GetConfigPathWide();
+std::wstring ResolveConfigPathWide(const std::wstring& legacyAdjacentPath);
+
 bool LoadConfig(const std::wstring& path, AppConfig& out, std::wstring& error, bool requireCredentials = true);
 bool SaveAppConfig(const std::wstring& path, const AppConfig& config);
 bool SaveCoordinatesToConfig(const std::wstring& path, double latitude, double longitude);
 bool SaveScheduleToConfig(const std::wstring& path, const std::string& onTime, const std::string& offTime);
-int BaseUrlToDataCenterIndex(const std::string& baseUrl);
-std::string DataCenterIndexToBaseUrl(int index);
+bool EnsureConfigFile(const std::wstring& path);
+#endif

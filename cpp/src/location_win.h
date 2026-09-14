@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config.h"
+#include "location_service.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -8,12 +9,6 @@
 #include <windows.h>
 
 #include <string>
-
-struct GeoLocation {
-    double latitude = 0.0;
-    double longitude = 0.0;
-    bool fromWindows = false;
-};
 
 enum class LocationPromptChoice {
     OpenSettings,

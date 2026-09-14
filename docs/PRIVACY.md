@@ -6,7 +6,13 @@ DuskPlug does not operate any servers and does not collect analytics or telemetr
 
 ## Data stored on your computer
 
-DuskPlug stores configuration locally in `%APPDATA%\SMART\config.json`, including:
+DuskPlug stores configuration locally on your computer:
+
+- **Windows:** `%APPDATA%\SMART\config.json`
+- **Linux:** `~/.config/duskplug/config.json`
+- **macOS:** `~/Library/Application Support/DuskPlug/config.json`
+
+That file includes:
 
 - Tuya Cloud API credentials (Access ID, Access Secret, Device ID) that you enter
 - Optional latitude and longitude for Smart Mode (dusk/dawn times)

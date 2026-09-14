@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/DuskPlug/DuskPlug/actions/workflows/ci.yml/badge.svg)](https://github.com/DuskPlug/DuskPlug/actions/workflows/ci.yml)
 
-Control a Tuya smart plug from the Windows system tray — manual on/off, **Smart Mode** (on at dusk, off at dawn), and **Schedule Mode** (fixed daily times).
+Control a Tuya smart plug from the system tray (Windows, Linux) or menu bar (macOS) — manual on/off, **Smart Mode** (on at dusk, off at dawn), and **Schedule Mode** (fixed daily times).
 
 Free, open source, and MIT-licensed. You only need your own free Tuya cloud project — no DuskPlug account.
 
@@ -23,7 +23,7 @@ Free, open source, and MIT-licensed. You only need your own free Tuya cloud proj
 ## Why DuskPlug?
 
 - **Free and open source** — MIT license, no subscription
-- **Your Tuya project only** — credentials stay in `%APPDATA%\SMART\config.json` on your PC
+- **Your Tuya project only** — credentials stay on your PC (see config paths below)
 - **Smart Mode** — sunset on, sunrise off from your location
 - **Schedule Mode** — fixed daily on/off times
 - **Easy install** — MSI installer or portable ZIP
@@ -34,7 +34,11 @@ Free, open source, and MIT-licensed. You only need your own free Tuya cloud proj
 
 **Portable ZIP:** download **DuskPlug-Windows.zip**, unzip it anywhere, and double-click **`Start-DuskPlug.cmd`**.
 
-Code signing via [SignPath Foundation](https://signpath.org) (pending approval). Windows builds will be Authenticode-signed once approved.
+**Linux:** download **DuskPlug-Linux-x64.tar.gz**, extract it, and run `./duskplug`. GNOME may need an [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) for the tray icon.
+
+**macOS:** download **DuskPlug-macOS.zip**, unzip **DuskPlug.app**, and open it (unsigned builds: right-click → Open the first time). Allow location access when Smart Mode requests it.
+
+Code signing via [SignPath Foundation](https://signpath.org) (pending approval). Windows builds will be Authenticode-signed once approved. macOS builds are unsigned until Apple notarization is set up.
 
 If you cloned this repo instead, run **`Build-DuskPlug.cmd`**. **`Build-Msi.cmd`** builds the installer (needs the .NET SDK).
 
@@ -70,7 +74,13 @@ You need a free [Tuya Developer Platform](https://iot.tuya.com) project so Windo
 
 7. **Copy Device ID** from **Devices → All Devices** for that plug.
 
-Do not put Access Secret or Device ID in git. DuskPlug stores them only in `%APPDATA%\SMART\config.json`.
+Do not put Access Secret or Device ID in git. DuskPlug stores them locally:
+
+| OS | Config path |
+|----|-------------|
+| Windows | `%APPDATA%\SMART\config.json` |
+| Linux | `~/.config/duskplug/config.json` |
+| macOS | `~/Library/Application Support/DuskPlug/config.json` |
 
 ## Enter the configuration in DuskPlug
 
@@ -87,7 +97,7 @@ Double-click **`Start-DuskPlug.cmd`**. On first run, **Settings** opens automati
 
 Click **Save**.
 
-**Smart Mode location:** click **Detect Location** (allow Windows location for desktop apps) or type latitude/longitude.
+**Smart Mode location:** click **Detect Location** (allow Windows location for desktop apps), type latitude/longitude, or paste a Google Maps pair such as `51.4809, -3.2092`.
 
 **Daily schedule:** set ON and OFF times if you will use Schedule Mode. Overnight spans (22:00 → 06:00) are fine.
 
@@ -95,7 +105,7 @@ Alternatively, **`Setup.cmd`** is a terminal wizard that fills the same values a
 
 ### Tray
 
-A lightbulb appears near the clock. Left-click toggles the plug. Right-click for **Smart Mode**, **Schedule Mode**, **Settings...**, and the rest.
+A lightbulb appears near the clock. Left-click toggles the plug. Right-click for **Smart Mode**, **Schedule Mode**, **Off when locked or sleeping** (toggle lock/sleep auto-off while in Smart or Schedule mode), **Settings...**, and the rest.
 
 | Mode | What it does |
 |------|----------------|
@@ -104,6 +114,21 @@ A lightbulb appears near the clock. Left-click toggles the plug. Right-click for
 | **Schedule Mode** | Follows the daily ON/OFF times from Settings |
 
 Optional: **`Install-Startup.cmd`** runs DuskPlug at Windows login.
+
+## Updating
+
+DuskPlug checks for updates once per day at startup and offers **Check for updates…** in the tray/menu. Downloads are verified with SHA256 before install.
+
+| Install method | How to update |
+|----------------|---------------|
+| **winget** (`DuskPlug.DuskPlug`) | `winget upgrade DuskPlug.DuskPlug` — the app shows this hint instead of installing in-app |
+| **Scoop** (`duskplug`) | `scoop update duskplug` |
+| **MSI** (Program Files) | Tray → **Check for updates…** → **Update to vX.Y.Z** (one UAC prompt for the installer) |
+| **Portable ZIP** | Same in-app flow; replaces `DuskPlug.exe` and `assets\` in place, then restarts |
+| **Linux tarball** | Same in-app flow; replaces the `duskplug` binary and `assets/` folder |
+| **macOS `.app` zip** | Same in-app flow; replaces the app bundle (unsigned builds may need Gatekeeper re-approval) |
+
+Your config in `%APPDATA%\SMART\` (Windows), `~/.config/duskplug/` (Linux), or `~/Library/Application Support/DuskPlug/` (macOS) is preserved across updates.
 
 ### Troubleshooting
 
@@ -118,17 +143,30 @@ Optional: **`Install-Startup.cmd`** runs DuskPlug at Windows login.
 
 ### Build
 
+**Windows**
+
 ```cmd
 Build-DuskPlug.cmd
 ```
 
 Or `cd cpp` and run `build.cmd`. Produces `DuskPlug.exe` in the project root.
 
+**Linux / macOS (CMake)**
+
+```bash
+cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
+cmake --build cpp/build
+```
+
+Or use `scripts/build-linux.sh` / `scripts/build-macos.sh` for release packages.
+
 ### Tests
 
 ```cmd
 cpp\test.cmd
 ```
+
+Linux/macOS: `cpp/build/duskplug_tests` after the CMake build above.
 
 ### Project layout
 

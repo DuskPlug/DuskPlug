@@ -5,6 +5,8 @@ $Root = Split-Path $PSScriptRoot -Parent
 $Src = Join-Path $Root 'cpp\src'
 $Out = Join-Path $Root 'DuskPlug.exe'
 
+& (Join-Path $Root 'scripts\generate-version-h.ps1')
+
 $sdkRoot = "${env:ProgramFiles(x86)}\Windows Kits\10"
 $sdkVersion = Get-ChildItem (Join-Path $sdkRoot 'Include') -Directory |
     Sort-Object Name -Descending |
@@ -65,8 +67,10 @@ $libs = @(
 )
 
 $sources = @(
-    'main.cpp', 'config.cpp', 'crypto.cpp', 'http_win.cpp', 'tuya_client.cpp', 'json_util.cpp',
-    'solar.cpp', 'schedule.cpp', 'settings_dialog.cpp', 'location_win.cpp', 'location_cli.cpp', 'activity_win.cpp', 'smart_mode.cpp'
+    'main.cpp', 'config.cpp', 'crypto.cpp', 'platform_util.cpp', 'http_win.cpp', 'tuya_client.cpp', 'json_util.cpp',
+    'solar.cpp', 'schedule.cpp', 'coords.cpp', 'settings_dialog.cpp', 'location_win.cpp', 'location_cli.cpp', 'activity_win.cpp',
+    'location_service_win.cpp', 'smart_mode.cpp', 'semver.cpp', 'install_kind.cpp', 'update_checker.cpp',
+    'update_apply_win.cpp'
 ) | ForEach-Object { Join-Path $Src $_ }
 
 $geoSrc = Join-Path $Src 'location_geolocator.cpp'

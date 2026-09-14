@@ -1,11 +1,17 @@
-#include "activity_win.h"
+#include "activity_tracker.h"
 #include "config.h"
 #include "location_cli.h"
-#include "location_win.h"
+#include "location_service.h"
+#include "platform_util.h"
+#include "platform_win.h"
 #include "schedule.h"
 #include "settings_dialog.h"
 #include "smart_mode.h"
 #include "tuya_client.h"
+#include "install_kind.h"
+#include "update_apply.h"
+#include "update_checker.h"
+#include "version.h"
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0A00
@@ -42,6 +48,9 @@ constexpr UINT CMD_SMART = 10006;
 constexpr UINT CMD_SET_LOCATION = 10007;
 constexpr UINT CMD_SCHEDULE = 10008;
 constexpr UINT CMD_SETTINGS = 10009;
+constexpr UINT CMD_LOCK_OFF = 10010;
+constexpr UINT CMD_CHECK_UPDATES = 10011;
+constexpr UINT CMD_APPLY_UPDATE = 10012;
 
 struct AppState {
     HWND hwnd = nullptr;
@@ -59,7 +68,11 @@ struct AppState {
     AppConfig config;
     std::unique_ptr<TuyaClient> client;
     SmartModeController smart;
+    ILocationService* locationService = nullptr;
+    IActivityTracker* activityTracker = nullptr;
     HPOWERNOTIFY suspendNotify = nullptr;
+    InstallKind installKind = InstallKind::Portable;
+    UpdateInfo pendingUpdate;
 };
 
 AppState g_app;
@@ -112,6 +125,12 @@ void ToggleScheduleMode();
 void RunSettings();
 void ApplySettingsReload();
 
+void UpdateApplyMenuItem();
+void HandleUpdateCheckResult(const UpdateInfo& info, bool showNoUpdateMessage);
+void RunUpdateCheck(bool manual);
+void RunApplyUpdate();
+void MaybeBackgroundUpdateCheck();
+
 void FinishStartup() {
     g_app.smart.LoadPersistedState();
     if (g_app.smart.IsAutomationEnabled()) {
@@ -121,14 +140,7 @@ void FinishStartup() {
     } else {
         RunPlugAction(false, false, true);
     }
-}
-
-std::wstring GetExeDirectory() {
-    wchar_t path[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, path, MAX_PATH);
-    std::wstring full(path);
-    const size_t pos = full.find_last_of(L"\\/");
-    return pos == std::wstring::npos ? L"." : full.substr(0, pos);
+    MaybeBackgroundUpdateCheck();
 }
 
 std::wstring JoinPath(const std::wstring& dir, const wchar_t* file) {
@@ -213,7 +225,7 @@ void ExitAutomationMode() {
 
     KillTimer(g_app.hwnd, IDT_SMART);
     KillTimer(g_app.hwnd, IDT_LOCK);
-    g_app.smart.Disable(g_app.hwnd);
+    g_app.smart.Disable();
     UpdateContextMenuChecks();
 }
 
@@ -262,7 +274,7 @@ void RunPlugAction(bool toggle, bool setOn, bool statusOnly) {
 }
 
 void ReloadConfigFromDisk() {
-    const std::wstring configPath = ResolveConfigPath(JoinPath(g_app.appDir, L"config.json"));
+    const std::wstring configPath = ResolveConfigPathWide(JoinPath(g_app.appDir, L"config.json"));
     std::wstring configError;
     AppConfig config{};
     if (LoadConfig(configPath, config, configError)) {
@@ -282,7 +294,7 @@ void ApplySettingsReload() {
 }
 
 void RunSettings() {
-    const std::wstring configPath = ResolveConfigPath(JoinPath(g_app.appDir, L"config.json"));
+    const std::wstring configPath = ResolveConfigPathWide(JoinPath(g_app.appDir, L"config.json"));
     EnsureConfigFile(configPath);
     if (!ShowSettingsDialog(g_app.hwnd, configPath, g_app.config)) {
         return;
@@ -299,10 +311,10 @@ void ToggleSmartMode() {
         return;
     }
 
-    std::wstring error;
+    std::string error;
     if (!g_app.smart.Enable(error, true)) {
         if (!error.empty()) {
-            ShowSetupBalloon(error.c_str());
+            ShowSetupBalloon(Utf8ToWide(error).c_str());
         }
         return;
     }
@@ -340,10 +352,10 @@ void ToggleScheduleMode() {
         }
     }
 
-    std::wstring error;
+    std::string error;
     if (!g_app.smart.EnableSchedule(error)) {
         if (!error.empty()) {
-            ShowSetupBalloon(error.c_str());
+            ShowSetupBalloon(Utf8ToWide(error).c_str());
         }
         return;
     }
@@ -399,6 +411,94 @@ void SetMenuCommandCheck(UINT commandId, bool checked) {
     SetMenuItemInfoW(g_app.menu, commandId, FALSE, &info);
 }
 
+void UpdateApplyMenuItem() {
+    if (g_app.pendingUpdate.available && SupportsInAppUpdate(g_app.installKind)) {
+        const std::wstring label = L"Update to v" + Utf8ToWide(g_app.pendingUpdate.version) + L"...";
+        ModifyMenuW(g_app.menu, CMD_APPLY_UPDATE, MF_BYCOMMAND | MF_STRING, CMD_APPLY_UPDATE, label.c_str());
+        EnableMenuItem(g_app.menu, CMD_APPLY_UPDATE, MF_ENABLED);
+    } else {
+        EnableMenuItem(g_app.menu, CMD_APPLY_UPDATE, MF_GRAYED);
+    }
+}
+
+void HandleUpdateCheckResult(const UpdateInfo& info, bool showNoUpdateMessage) {
+    g_app.pendingUpdate = info;
+    UpdateApplyMenuItem();
+
+    if (!info.error.empty()) {
+        MessageBoxW(
+            g_app.hwnd,
+            Utf8ToWide(info.error).c_str(),
+            L"DuskPlug — Updates",
+            MB_ICONWARNING | MB_OK);
+        return;
+    }
+
+    if (!info.available) {
+        if (showNoUpdateMessage) {
+            const std::wstring message = L"You have the latest version (v" + Utf8ToWide(DUSKPLUG_VERSION) + L").";
+            MessageBoxW(g_app.hwnd, message.c_str(), L"DuskPlug — Updates", MB_ICONINFORMATION | MB_OK);
+        }
+        return;
+    }
+
+    if (!SupportsInAppUpdate(g_app.installKind)) {
+        std::string message = "DuskPlug " + info.version + " is available.\n\n" + PackageManagerUpdateHint(g_app.installKind);
+        MessageBoxW(
+            g_app.hwnd,
+            Utf8ToWide(message).c_str(),
+            L"DuskPlug — Updates",
+            MB_ICONINFORMATION | MB_OK);
+        return;
+    }
+
+    const std::wstring balloon = L"DuskPlug " + Utf8ToWide(info.version) + L" is available. Right-click and choose Update.";
+    ShowSetupBalloon(balloon.c_str());
+}
+
+void RunUpdateCheck(bool manual) {
+    HandleUpdateCheckResult(CheckForUpdates(g_app.installKind), manual);
+}
+
+void RunApplyUpdate() {
+    if (!g_app.pendingUpdate.available || !SupportsInAppUpdate(g_app.installKind)) {
+        return;
+    }
+
+    const std::wstring prompt = L"Download and install DuskPlug " + Utf8ToWide(g_app.pendingUpdate.version) + L"?";
+    if (MessageBoxW(g_app.hwnd, prompt.c_str(), L"DuskPlug — Updates", MB_YESNO | MB_ICONQUESTION) != IDYES) {
+        return;
+    }
+
+    wcscpy_s(g_app.nid.szTip, L"DuskPlug: updating...");
+    g_app.nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID;
+    g_app.nid.guidItem = kTrayIconGuid;
+    Shell_NotifyIconW(NIM_MODIFY, &g_app.nid);
+
+    const ApplyUpdateResult result = ApplyUpdate(g_app.pendingUpdate, g_app.installKind);
+    if (!result.success) {
+        MessageBoxW(
+            g_app.hwnd,
+            Utf8ToWide(result.error).c_str(),
+            L"DuskPlug — Updates",
+            MB_ICONERROR | MB_OK);
+        RestoreTrayState();
+        return;
+    }
+
+    if (result.restartScheduled) {
+        g_app.smart.SavePersistedState();
+        DestroyWindow(g_app.hwnd);
+    }
+}
+
+void MaybeBackgroundUpdateCheck() {
+    if (!ShouldCheckForUpdatesNow()) {
+        return;
+    }
+    HandleUpdateCheckResult(CheckForUpdates(g_app.installKind), false);
+}
+
 void UpdateContextMenuChecks() {
     const bool automation = g_app.smart.IsAutomationEnabled();
     const bool smart = g_app.smart.IsEnabled();
@@ -407,6 +507,9 @@ void UpdateContextMenuChecks() {
     SetMenuCommandCheck(CMD_SCHEDULE, schedule);
     SetMenuCommandCheck(CMD_ON, !automation && g_app.hasKnownState && g_app.knownOn);
     SetMenuCommandCheck(CMD_OFF, !automation && g_app.hasKnownState && !g_app.knownOn);
+    SetMenuCommandCheck(CMD_LOCK_OFF, g_app.smart.IsLockOffEnabled());
+    EnableMenuItem(g_app.menu, CMD_LOCK_OFF, automation ? MF_ENABLED : MF_GRAYED);
+    UpdateApplyMenuItem();
 }
 
 void ShowContextMenu() {
@@ -487,7 +590,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
 
     case WM_WTSSESSION_CHANGE:
-        g_app.smart.OnSessionChange(wParam);
+        if (wParam == WTS_SESSION_UNLOCK) {
+            g_app.smart.OnSessionChangeEvent(true);
+        } else if (wParam == WTS_SESSION_LOCK) {
+            g_app.smart.OnSessionChangeEvent(false);
+        }
         return 0;
 
     case WM_POWERBROADCAST:
@@ -529,11 +636,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case CMD_SCHEDULE:
             ToggleScheduleMode();
             break;
+        case CMD_LOCK_OFF:
+            g_app.smart.ToggleLockOffEnabled();
+            UpdateContextMenuChecks();
+            break;
         case CMD_SETTINGS:
             RunSettings();
             break;
         case CMD_REFRESH:
             RunPlugAction(false, false, true);
+            break;
+        case CMD_CHECK_UPDATES:
+            RunUpdateCheck(true);
+            break;
+        case CMD_APPLY_UPDATE:
+            RunApplyUpdate();
             break;
         case CMD_RESTART:
             RestartApp(hwnd);
@@ -553,7 +670,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             UnregisterSuspendResumeNotification(g_app.suspendNotify);
             g_app.suspendNotify = nullptr;
         }
-        g_app.smart.Shutdown(hwnd);
+        g_app.smart.Shutdown();
+        delete g_app.locationService;
+        g_app.locationService = nullptr;
+        delete g_app.activityTracker;
+        g_app.activityTracker = nullptr;
         Shell_NotifyIconW(NIM_DELETE, &g_app.nid);
         if (g_app.nid.hIcon) {
             DestroyIcon(g_app.nid.hIcon);
@@ -620,8 +741,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
 
-    g_app.appDir = GetExeDirectory();
-    const std::wstring configPath = ResolveConfigPath(JoinPath(g_app.appDir, L"config.json"));
+    g_app.appDir = Utf8ToWide(GetExeDirectory());
+    g_app.installKind = DetectInstallKind();
+    const std::wstring configPath = ResolveConfigPathWide(JoinPath(g_app.appDir, L"config.json"));
     EnsureConfigFile(configPath);
     std::wstring configError;
     if (!LoadConfig(configPath, g_app.config, configError, false)) {
@@ -707,8 +829,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_OFF, L"Turn Off");
     AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_SMART, L"Smart Mode");
     AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_SCHEDULE, L"Schedule Mode");
+    AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_LOCK_OFF, L"Off when locked or sleeping");
     AppendMenuW(g_app.menu, MF_STRING, CMD_SETTINGS, L"Settings...");
     AppendMenuW(g_app.menu, MF_STRING, CMD_REFRESH, L"Refresh Status");
+    AppendMenuW(g_app.menu, MF_STRING, CMD_CHECK_UPDATES, L"Check for updates...");
+    AppendMenuW(g_app.menu, MF_STRING | MF_GRAYED, CMD_APPLY_UPDATE, L"Update to latest...");
     AppendMenuW(g_app.menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(g_app.menu, MF_STRING, CMD_RESTART, L"Restart");
     AppendMenuW(g_app.menu, MF_STRING, CMD_EXIT, L"Exit");
@@ -719,6 +844,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         SetMenuItemBitmaps(g_app.menu, CMD_OFF, MF_BYCOMMAND, nullptr, g_app.menuTick);
         SetMenuItemBitmaps(g_app.menu, CMD_SMART, MF_BYCOMMAND, nullptr, g_app.menuTick);
         SetMenuItemBitmaps(g_app.menu, CMD_SCHEDULE, MF_BYCOMMAND, nullptr, g_app.menuTick);
+        SetMenuItemBitmaps(g_app.menu, CMD_LOCK_OFF, MF_BYCOMMAND, nullptr, g_app.menuTick);
     }
 
     if (!IsConfigComplete(g_app.config)) {
@@ -731,14 +857,24 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         }
     }
 
+    g_app.locationService = CreateWinLocationService(g_app.hwnd, g_app.appDir);
+    g_app.activityTracker = CreateWinActivityTracker(g_app.hwnd);
+
     if (IsConfigComplete(g_app.config)) {
         g_app.client = std::make_unique<TuyaClient>(g_app.config);
 
         SmartModeCallbacks callbacks{};
         callbacks.updateTray = UpdateTrayDisplay;
-        callbacks.showSetupBalloon = ShowSetupBalloon;
+        callbacks.showSetupMessage = [](const std::string& text) {
+            ShowSetupBalloon(Utf8ToWide(text).c_str());
+        };
         callbacks.isBusy = []() { return g_app.busy; };
-        g_app.smart.Initialize(g_app.hwnd, g_app.config, g_app.appDir, g_app.client.get(), callbacks);
+        g_app.smart.Initialize(
+            g_app.config,
+            g_app.client.get(),
+            g_app.locationService,
+            g_app.activityTracker,
+            callbacks);
     }
 
     SetTimer(g_app.hwnd, IDT_POLL, 30000, nullptr);

@@ -26,3 +26,13 @@ After merge, users can install with:
 ```powershell
 winget install DuskPlug.DuskPlug
 ```
+
+## Updates
+
+winget installs use the same MSI as the direct installer. Users should update with:
+
+```powershell
+winget upgrade DuskPlug.DuskPlug
+```
+
+When DuskPlug detects a winget/Scoop install, the tray menu shows package-manager instructions instead of downloading updates in-app.

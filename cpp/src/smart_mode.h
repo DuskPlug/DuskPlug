@@ -1,14 +1,9 @@
 #pragma once
 
-#include "activity_win.h"
+#include "activity_tracker.h"
 #include "config.h"
-#include "location_win.h"
+#include "location_service.h"
 #include "tuya_client.h"
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
 
 #include <functional>
 #include <string>
@@ -21,29 +16,29 @@ enum class ControlMode {
 
 struct SmartModeCallbacks {
     std::function<void(bool on)> updateTray;
-    std::function<void(const wchar_t* text)> showSetupBalloon;
+    std::function<void(const std::string& text)> showSetupMessage;
     std::function<bool()> isBusy;
 };
 
 class SmartModeController {
 public:
     void Initialize(
-        HWND hwnd,
         const AppConfig& config,
-        const std::wstring& appDir,
         TuyaClient* client,
+        ILocationService* locationService,
+        IActivityTracker* activityTracker,
         SmartModeCallbacks callbacks);
 
-    void Shutdown(HWND hwnd);
+    void Shutdown();
 
     ControlMode GetMode() const { return mode_; }
     bool IsEnabled() const { return mode_ == ControlMode::Smart; }
     bool IsScheduleEnabled() const { return mode_ == ControlMode::Schedule; }
     bool IsAutomationEnabled() const { return mode_ != ControlMode::Manual; }
 
-    bool Enable(std::wstring& error, bool promptForLocation = true);
-    bool EnableSchedule(std::wstring& error);
-    void Disable(HWND hwnd);
+    bool Enable(std::string& error, bool promptForLocation = true);
+    bool EnableSchedule(std::string& error);
+    void Disable();
 
     void LoadPersistedState();
     void SavePersistedState() const;
@@ -51,7 +46,8 @@ public:
     void Evaluate();
     void OnLockOffDue();
     void OnSessionUnlock();
-    void OnSessionChange(WPARAM event);
+    void OnSessionLock();
+    void OnSessionChangeEvent(bool isUnlock);
     void OnLockTimerTick();
     void OnPowerSuspend();
     void OnPowerResume();
@@ -63,23 +59,26 @@ public:
     bool GetKnownPlugState() const { return knownPlugOn_; }
     bool HasKnownPlugState() const { return hasKnownPlugState_; }
 
+    bool IsLockOffEnabled() const { return lockOffEnabled_; }
+    void SetLockOffEnabled(bool enabled);
+    void ToggleLockOffEnabled();
+
 private:
-    bool EnsureLocation(std::wstring& error, bool promptForLocation);
+    bool EnsureLocation(std::string& error, bool promptForLocation);
     bool ShouldBeOn() const;
     bool ShouldBeOnSchedule() const;
     void ApplyDesiredState(bool desiredOn);
-    bool StartActivityTracking(std::wstring& error);
+    bool StartActivityTracking(std::string& error);
 
-    HWND hwnd_ = nullptr;
     AppConfig config_{};
-    std::wstring appDir_;
     TuyaClient* client_ = nullptr;
+    ILocationService* locationService_ = nullptr;
+    IActivityTracker* activity_ = nullptr;
     SmartModeCallbacks callbacks_{};
-    ActivityTracker activity_{};
     ControlMode mode_ = ControlMode::Manual;
     GeoLocation location_{};
     bool hasLocation_ = false;
-    ULONGLONG locationResolvedAtMs_ = 0;
+    uint64_t locationResolvedAtMs_ = 0;
     bool hasKnownPlugState_ = false;
     bool knownPlugOn_ = false;
     bool lastAppliedOn_ = false;
@@ -87,4 +86,5 @@ private:
     bool needsMouseAfterUnlock_ = false;
     bool setupErrorShown_ = false;
     bool powerOffHold_ = false;
+    bool lockOffEnabled_ = true;
 };

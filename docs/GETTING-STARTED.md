@@ -143,7 +143,7 @@ Alternatively, double-click **`Setup.cmd`** for a terminal wizard that asks for 
 
 In Settings, under **Smart Mode location**:
 
-1. Click **Detect Location**, or type latitude and longitude yourself.
+1. Click **Detect Location**, type latitude and longitude, or paste coordinates copied from Google Maps (for example `51.48096831196373, -3.209212141442959`).
 2. Windows may prompt for location access. Allow it, and in Windows **Settings → Privacy & security → Location** turn on location services and **Let desktop apps access your location**.
 3. Leave **After sunset** / **Before sunrise** at `0` unless you want the light to come on a few minutes after sunset or stay on a few minutes after sunrise.
 

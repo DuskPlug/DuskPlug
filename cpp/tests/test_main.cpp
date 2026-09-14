@@ -5,6 +5,9 @@ void RunJsonTests();
 void RunCryptoTests();
 void RunSolarTests();
 void RunConfigTests();
+void RunCoordsTests();
+void RunSemverTests();
+void RunUpdateCheckerTests();
 
 int main() {
     RunScheduleTests();
@@ -12,6 +15,9 @@ int main() {
     RunCryptoTests();
     RunSolarTests();
     RunConfigTests();
+    RunCoordsTests();
+    RunSemverTests();
+    RunUpdateCheckerTests();
 
     if (g_testFailures == 0) {
         std::printf("\nAll tests passed.\n");

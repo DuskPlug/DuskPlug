@@ -18,6 +18,8 @@ if (-not $Gpp) {
 }
 
 $flags = @('-std=c++17', '-O0', '-Wall', "-I$Src", "-I$Tests")
+& (Join-Path (Split-Path $CppRoot -Parent) 'scripts\generate-version-h.ps1')
+
 $sources = @(
     (Join-Path $Tests 'test_main.cpp'),
     (Join-Path $Tests 'schedule_test.cpp'),
@@ -25,15 +27,21 @@ $sources = @(
     (Join-Path $Tests 'crypto_test.cpp'),
     (Join-Path $Tests 'solar_test.cpp'),
     (Join-Path $Tests 'config_test.cpp'),
+    (Join-Path $Tests 'coords_test.cpp'),
+    (Join-Path $Tests 'semver_test.cpp'),
+    (Join-Path $Tests 'update_checker_test.cpp'),
     (Join-Path $Src 'schedule.cpp'),
     (Join-Path $Src 'json_util.cpp'),
     (Join-Path $Src 'crypto.cpp'),
     (Join-Path $Src 'solar.cpp'),
-    (Join-Path $Src 'config.cpp')
+    (Join-Path $Src 'config.cpp'),
+    (Join-Path $Src 'coords.cpp'),
+    (Join-Path $Src 'platform_util.cpp'),
+    (Join-Path $Src 'semver.cpp')
 )
 
 Write-Host "Building DuskPlug tests..." -ForegroundColor Cyan
-& $Gpp @flags $sources '-o' $Out '-ladvapi32' '-lole32' '-lshell32'
+& $Gpp @flags $sources '-o' $Out '-ladvapi32' '-lole32' '-lshell32' '-lcrypt32'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Push-Location $CppRoot
@@ -43,5 +51,5 @@ try {
 }
 finally {
     Pop-Location
-    Remove-Item -Force -ErrorAction SilentlyContinue $Out, (Join-Path $CppRoot 'smarttray_config_test.json')
+    Remove-Item -Force -ErrorAction SilentlyContinue $Out, (Join-Path $CppRoot 'duskplug_config_test.json')
 }

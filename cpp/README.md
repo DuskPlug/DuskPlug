@@ -1,10 +1,10 @@
 # DuskPlug (C++)
 
-Non-coders: start with the [root README](../README.md) and double-click `Start-DuskPlug.cmd`.
-
-Native Windows tray app — no PowerShell, no console window.
+Native tray/menu-bar apps for Windows, Linux, and macOS — no PowerShell runtime required on any platform.
 
 ## Build
+
+### Windows
 
 Requires MinGW g++ (installed automatically via WinLibs if needed):
 
@@ -13,71 +13,63 @@ cd cpp
 build.cmd
 ```
 
-Or install manually: `winget install BrechtSanders.WinLibs.POSIX.UCRT`
-
 Produces `DuskPlug.exe` in the project root.
 
-## Run
+### Linux
 
-Double-click **DuskPlug.exe**, or reinstall startup:
+Dependencies (Debian/Ubuntu):
 
-```powershell
-.\Install-Startup.ps1
+```bash
+sudo apt install build-essential cmake pkg-config libcurl4-openssl-dev \
+  libgtk-3-dev libayatana-appindicator3-dev libgeoclue-2-dev libsystemd-dev
+cmake -S cpp -B cpp/build && cmake --build cpp/build --target duskplug
 ```
 
-Startup prefers `DuskPlug.exe` when present; otherwise it falls back to `Launch-Tray.vbs`.
+### macOS
+
+```bash
+brew install cmake curl
+cmake -S cpp -B cpp/build && cmake --build cpp/build --target DuskPlug
+```
+
+## Architecture
+
+| Layer | Purpose |
+|-------|---------|
+| `src/config.cpp`, `tuya_client.cpp`, `smart_mode.cpp`, … | Portable UTF-8 core |
+| `src/platform_util.cpp` | Paths, file I/O, time, random |
+| `src/http_win.cpp` / `src/http_curl.cpp` | Platform HTTP |
+| `src/main.cpp` + Win32 UI | Windows tray app (unchanged UX) |
+| `src/linux/` | GTK3 + Ayatana AppIndicator |
+| `src/macos/` | Cocoa menu bar app |
 
 ## Behaviour
 
 ### Manual mode
 
 - Left-click toggles the plug
-- Right-click menu: Turn On / Off / Smart Mode / Schedule Mode / Settings / Refresh / Restart / Exit
-- Lightbulb icon shows on/off state
+- Tray/menu: Turn On / Off / Smart Mode / Schedule Mode / Settings / Refresh / Exit
 - Polls every 30 seconds
 
 ### Smart Mode
 
-Enable from the tray menu (checkmark when active). Smart Mode:
-
-- Turns the plug **on at dusk** and **off at dawn**, based on your location and the date (season-adjusting sunrise/sunset)
-- Uses **Windows Location Services** first; falls back to latitude/longitude from **Settings**
-- Turns **off** if the screen is locked for more than 30 seconds (configurable via `LockOffSeconds`)
-- Before **sleep or hibernate**, arms the plug's countdown (same 30 seconds) so the light turns off after the PC is already off; if the plug has no countdown, it turns off immediately
-- Turns **back on** when you move the mouse after unlocking (if it's dark)
-- Shows a blue-ring **smart icon** in the tray
-- **Turn On**, **Turn Off**, or **left-click toggle** exit Smart Mode until you enable it again
-- Preference is saved to `%APPDATA%\SMART\state.json` and restored on restart
+- On at dusk, off at dawn from your location
+- **Windows:** Windows Location Services
+- **Linux:** GeoClue 2
+- **macOS:** Core Location
+- Lock-screen auto-off and sleep countdown-off on all platforms (toggle from tray menu: **Off when locked or sleeping**)
 
 ### Schedule Mode
 
-- Enable from the tray menu; uses the daily ON/OFF times from **Settings**
-- No location required
-- Lock-screen auto-off applies the same way as Smart Mode
-- Sleep/hibernate auto-off applies the same way as Smart Mode
+- Fixed daily ON/OFF times from Settings
+- Lock-screen and sleep behaviour matches Smart Mode
 
-### Settings
+## Config paths
 
-All configuration is edited in **Settings...** from the tray menu (stored in `%APPDATA%\SMART\config.json`):
+| OS | Path |
+|----|------|
+| Windows | `%APPDATA%\SMART\config.json` |
+| Linux | `~/.config/duskplug/config.json` |
+| macOS | `~/Library/Application Support/DuskPlug/config.json` |
 
-| Section | Fields |
-|---------|--------|
-| Plug connection | Access ID, Access Secret, Device ID, data center |
-| Smart Mode | Latitude/longitude, Detect Location, sunset/sunrise offsets |
-| Daily schedule | ON and OFF times |
-| Advanced | Switch code, lock-off seconds |
-
-Windows Location must be enabled in **Settings → Privacy & security → Location** for Detect Location to work.
-
-## Files
-
-- `src/main.cpp` — Win32 tray UI
-- `src/smart_mode.cpp` — Smart Mode orchestration
-- `src/solar.cpp` — Sunrise/sunset calculation
-- `src/location_win.cpp` — Windows Location + config fallback
-- `src/activity_win.cpp` — Lock detection and mouse hook
-- `src/tuya_client.cpp` — Tuya Cloud API
-- `src/http_win.cpp` — WinHTTP
-- `src/crypto.cpp` — HMAC-SHA256 signing
-
-Uses `%APPDATA%\SMART\config.json` and `assets\light-*.ico`.
+Uses `assets/light-*.ico` on Windows and icon names on Linux (install PNGs alongside the binary for custom icons).

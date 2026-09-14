@@ -1,11 +1,8 @@
 #include "schedule.h"
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-
 #include <cctype>
+#include <cstdio>
+#include <ctime>
 
 bool FormatTimeHHMM(int minutes, std::string& out) {
     if (minutes < 0 || minutes >= 24 * 60) {
@@ -23,7 +20,7 @@ bool ParseTimeHHMM(const std::string& text, int& minutesOut) {
         return false;
     }
 
-    size_t colon = text.find(':');
+    const size_t colon = text.find(':');
     if (colon == std::string::npos || colon == 0 || colon >= text.size() - 1) {
         return false;
     }
@@ -64,7 +61,12 @@ bool ShouldBeOnForSchedule(int onMinutes, int offMinutes, int nowMinutes) {
 }
 
 int GetLocalMinutesNow() {
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    return st.wHour * 60 + st.wMinute;
+    const std::time_t now = std::time(nullptr);
+    std::tm localTime{};
+#ifdef _WIN32
+    localtime_s(&localTime, &now);
+#else
+    localtime_r(&now, &localTime);
+#endif
+    return localTime.tm_hour * 60 + localTime.tm_min;
 }

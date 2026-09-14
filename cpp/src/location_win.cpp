@@ -15,7 +15,7 @@ bool ApplyConfigFallback(const AppConfig& config, GeoLocation& out) {
 
     out.latitude = config.latitude;
     out.longitude = config.longitude;
-    out.fromWindows = false;
+    out.fromOs = false;
     return true;
 }
 
@@ -59,7 +59,7 @@ bool ResolveLocationInternal(
     if (TryWinRtGeolocator(hwnd, lat, lon, requestAccess)) {
         out.latitude = lat;
         out.longitude = lon;
-        out.fromWindows = true;
+        out.fromOs = true;
         return true;
     }
 

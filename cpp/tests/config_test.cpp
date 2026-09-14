@@ -1,16 +1,13 @@
 #include "../src/config.h"
+#include "../src/platform_util.h"
 #include "../src/schedule.h"
 #include "test_assert.h"
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-
+#include <cstdio>
 #include <string>
 
 TEST(LoadConfigWithScheduleFields) {
-    const std::wstring path = L"./smarttray_config_test.json";
+    const std::string path = "./duskplug_config_test.json";
     const std::string json = R"({
   "ClientId": "id",
   "ClientSecret": "secret",
@@ -20,21 +17,10 @@ TEST(LoadConfigWithScheduleFields) {
   "ScheduleOffTime": "23:00"
 })";
 
-    HANDLE file = CreateFileW(
-        path.c_str(),
-        GENERIC_WRITE,
-        0,
-        nullptr,
-        CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL,
-        nullptr);
-    EXPECT_TRUE(file != INVALID_HANDLE_VALUE);
-    DWORD written = 0;
-    WriteFile(file, json.data(), static_cast<DWORD>(json.size()), &written, nullptr);
-    CloseHandle(file);
+    EXPECT_TRUE(WriteTextFile(path, json));
 
     AppConfig config{};
-    std::wstring error;
+    std::string error;
     EXPECT_TRUE(LoadConfig(path, config, error));
     EXPECT_EQ(config.scheduleOnTime, "18:00");
     EXPECT_EQ(config.scheduleOffTime, "23:00");
@@ -42,7 +28,8 @@ TEST(LoadConfigWithScheduleFields) {
 
     int onMinutes = 0;
     EXPECT_TRUE(ParseTimeHHMM(config.scheduleOnTime, onMinutes));
-    DeleteFileW(path.c_str());
+
+    remove(path.c_str());
 }
 
 void RunConfigTests() {

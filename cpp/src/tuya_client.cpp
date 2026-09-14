@@ -1,14 +1,8 @@
 #include "tuya_client.h"
 #include "crypto.h"
-#include "http_win.h"
+#include "http.h"
 #include "json_util.h"
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#include <wincrypt.h>
-#include <sstream>
+#include "platform_util.h"
 
 namespace {
 constexpr const char* kEmptyBodySha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -17,43 +11,20 @@ constexpr const char* kEmptyBodySha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41
 TuyaClient::TuyaClient(AppConfig config) : config_(std::move(config)) {}
 
 std::string TuyaClient::CurrentTimestampMs() {
-    FILETIME fileTime{};
-    GetSystemTimeAsFileTime(&fileTime);
-    ULARGE_INTEGER time{};
-    time.LowPart = fileTime.dwLowDateTime;
-    time.HighPart = fileTime.dwHighDateTime;
-    constexpr unsigned long long kEpochOffset = 116444736000000000ULL;
-    const unsigned long long ms = (time.QuadPart - kEpochOffset) / 10000ULL;
-    return std::to_string(ms);
+    return std::to_string(CurrentTimeMs());
 }
 
 std::string TuyaClient::NewNonce() {
-    static const char* hex = "0123456789abcdef";
-    unsigned char bytes[16]{};
-    HCRYPTPROV prov = 0;
-    if (CryptAcquireContextW(&prov, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
-        CryptGenRandom(prov, sizeof(bytes), bytes);
-        CryptReleaseContext(prov, 0);
-    }
-    std::string nonce(32, '0');
-    for (size_t i = 0; i < sizeof(bytes); ++i) {
-        nonce[i * 2] = hex[(bytes[i] >> 4) & 0xF];
-        nonce[i * 2 + 1] = hex[bytes[i] & 0xF];
-    }
-    return nonce;
+    return RandomHexNonce(16);
 }
 
-std::wstring TuyaClient::BuildUrl(const std::string& baseUrl, const std::string& path) {
+std::string TuyaClient::BuildUrl(const std::string& baseUrl, const std::string& path) {
     std::string url = baseUrl;
     while (!url.empty() && url.back() == '/') {
         url.pop_back();
     }
     url += path;
-
-    const int len = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
-    std::wstring wide(len - 1, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, wide.data(), len);
-    return wide;
+    return url;
 }
 
 std::string TuyaClient::CountdownCodeFromSwitch(const std::string& switchCode) {
@@ -96,13 +67,8 @@ std::string TuyaClient::ApiRequest(
         headers["access_token"] = accessToken;
     }
 
-    const std::wstring url = BuildUrl(config_.baseUrl, path);
-    const HttpResponse response = HttpRequest(
-        method == "POST" ? L"POST" : L"GET",
-        url,
-        headers,
-        body,
-        timeoutMs);
+    const std::string url = BuildUrl(config_.baseUrl, path);
+    const HttpResponse response = HttpRequest(method, url, headers, body, timeoutMs);
 
     if (!response.error.empty()) {
         error = "Network error";
@@ -118,7 +84,7 @@ std::string TuyaClient::ApiRequest(
 }
 
 std::string TuyaClient::GetAccessToken(std::string& error, unsigned long timeoutMs) {
-    const ULONGLONG now = GetTickCount64();
+    const uint64_t now = MonotonicTimeMs();
     if (!cachedAccessToken_.empty() && now < tokenValidUntilMs_) {
         return cachedAccessToken_;
     }

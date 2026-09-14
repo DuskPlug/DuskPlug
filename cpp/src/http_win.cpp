@@ -1,24 +1,13 @@
-#include "http_win.h"
+#include "http.h"
+#include "platform_util.h"
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <winhttp.h>
 
-#include <sstream>
-
 #pragma comment(lib, "winhttp.lib")
-
-static std::wstring Utf8ToWide(const std::string& text) {
-    if (text.empty()) {
-        return L"";
-    }
-    const int len = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, nullptr, 0);
-    if (len <= 1) {
-        return L"";
-    }
-    std::wstring out(static_cast<size_t>(len - 1), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, out.data(), len);
-    return out;
-}
 
 static bool ParseUrl(const std::wstring& url, URL_COMPONENTS& components, std::wstring& host, std::wstring& path) {
     ZeroMemory(&components, sizeof(components));
@@ -41,18 +30,21 @@ static bool ParseUrl(const std::wstring& url, URL_COMPONENTS& components, std::w
 }
 
 HttpResponse HttpRequest(
-    const std::wstring& method,
-    const std::wstring& url,
+    const std::string& method,
+    const std::string& url,
     const std::map<std::string, std::string>& headers,
     const std::string& body,
     unsigned long timeoutMs) {
     HttpResponse response;
 
+    const std::wstring wideUrl = Utf8ToWide(url);
+    const std::wstring wideMethod = Utf8ToWide(method);
+
     URL_COMPONENTS components{};
     std::wstring host;
     std::wstring path;
-    if (!ParseUrl(url, components, host, path)) {
-        response.error = L"Invalid URL";
+    if (!ParseUrl(wideUrl, components, host, path)) {
+        response.error = "Invalid URL";
         return response;
     }
 
@@ -61,36 +53,31 @@ HttpResponse HttpRequest(
 
     HINTERNET session = WinHttpOpen(L"DuskPlug/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!session) {
-        response.error = L"WinHttpOpen failed";
+        response.error = "WinHttpOpen failed";
         return response;
     }
 
     if (timeoutMs > 0) {
-        WinHttpSetTimeouts(
-            session,
-            timeoutMs,
-            timeoutMs,
-            timeoutMs,
-            timeoutMs);
+        WinHttpSetTimeouts(session, timeoutMs, timeoutMs, timeoutMs, timeoutMs);
     }
 
     HINTERNET connect = WinHttpConnect(session, host.c_str(), port, 0);
     if (!connect) {
-        response.error = L"WinHttpConnect failed";
+        response.error = "WinHttpConnect failed";
         WinHttpCloseHandle(session);
         return response;
     }
 
     HINTERNET request = WinHttpOpenRequest(
         connect,
-        method.c_str(),
+        wideMethod.c_str(),
         path.c_str(),
         nullptr,
         WINHTTP_NO_REFERER,
         WINHTTP_DEFAULT_ACCEPT_TYPES,
         secure ? WINHTTP_FLAG_SECURE : 0);
     if (!request) {
-        response.error = L"WinHttpOpenRequest failed";
+        response.error = "WinHttpOpenRequest failed";
         WinHttpCloseHandle(connect);
         WinHttpCloseHandle(session);
         return response;
@@ -112,7 +99,7 @@ HttpResponse HttpRequest(
         0);
 
     if (!sendOk || !WinHttpReceiveResponse(request, nullptr)) {
-        response.error = L"HTTP request failed";
+        response.error = "HTTP request failed";
         WinHttpCloseHandle(request);
         WinHttpCloseHandle(connect);
         WinHttpCloseHandle(session);
