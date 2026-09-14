@@ -79,7 +79,7 @@ else()
 
     pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
     pkg_check_modules(APPINDICATOR REQUIRED ayatana-appindicator3-0.1)
-    pkg_check_modules(GEOCLUE REQUIRED IMPORTED_TARGET geoclue-2.0)
+    pkg_check_modules(GEOCLUE REQUIRED IMPORTED_TARGET libgeoclue-2.0)
     pkg_check_modules(SYSTEMD REQUIRED libsystemd)
 
     add_executable(duskplug
