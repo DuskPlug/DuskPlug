@@ -2,7 +2,7 @@
 
 #include "../location_service.h"
 
-#include <geoclue/geoclue-simple.h>
+#include <gclue-simple.h>
 #include <gio/gio.h>
 
 namespace {
@@ -19,9 +19,9 @@ bool ApplyConfigFallback(const AppConfig& config, GeoLocation& out) {
 
 bool TryGeoclue(GeoLocation& out, std::string& error) {
     GError* gerror = nullptr;
-    GeoclueSimple* simple = geoclue_simple_new_sync(
+    GClueSimple* simple = gclue_simple_new_sync(
         "duskplug",
-        GEOCLUE_ACCURACY_CITY,
+        GCLUE_ACCURACY_CITY,
         nullptr,
         &gerror);
     if (!simple) {
@@ -32,9 +32,9 @@ bool TryGeoclue(GeoLocation& out, std::string& error) {
         return false;
     }
 
-    GeoclueLocation* location = geoclue_simple_get_location(simple);
-    out.latitude = geoclue_location_get_latitude(location);
-    out.longitude = geoclue_location_get_longitude(location);
+    GClueLocation* location = gclue_simple_get_location(simple);
+    out.latitude = gclue_location_get_latitude(location);
+    out.longitude = gclue_location_get_longitude(location);
     out.fromOs = true;
     g_object_unref(simple);
     return true;

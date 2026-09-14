@@ -43,6 +43,7 @@ if(WIN32)
         src/location_geolocator.cpp
         src/activity_win.cpp
         src/location_service_win.cpp
+        src/brightness_win.cpp
         src/app.rc
     )
     target_sources(duskplug_core PRIVATE src/update_apply_win.cpp)
@@ -61,13 +62,14 @@ elseif(APPLE)
         src/macos/settings_macos.mm
         src/macos/location_macos.mm
         src/macos/activity_macos.mm
+        src/macos/brightness_macos.mm
     )
     set_target_properties(DuskPlug PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/macos/Info.plist"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
     )
     target_sources(duskplug_core PRIVATE src/update_apply_macos.mm)
-    target_link_libraries(DuskPlug PRIVATE duskplug_core "-framework AppKit" "-framework CoreLocation" "-framework ServiceManagement")
+    target_link_libraries(DuskPlug PRIVATE duskplug_core "-framework AppKit" "-framework CoreLocation" "-framework ServiceManagement" "-framework IOKit")
 else()
     target_sources(duskplug_core PRIVATE src/http_curl.cpp)
     find_package(PkgConfig REQUIRED)
@@ -77,7 +79,7 @@ else()
 
     pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
     pkg_check_modules(APPINDICATOR REQUIRED ayatana-appindicator3-0.1)
-    pkg_check_modules(GEOCLUE REQUIRED IMPORTED_TARGET geoclue-2.0)
+    pkg_check_modules(GEOCLUE REQUIRED geoclue-2.0)
     pkg_check_modules(SYSTEMD REQUIRED libsystemd)
 
     add_executable(duskplug
@@ -85,14 +87,16 @@ else()
         src/linux/settings_gtk.cpp
         src/linux/location_linux.cpp
         src/linux/activity_linux.cpp
+        src/linux/brightness_linux.cpp
     )
-    target_include_directories(duskplug PRIVATE ${GTK3_INCLUDE_DIRS} ${APPINDICATOR_INCLUDE_DIRS})
+    target_include_directories(duskplug PRIVATE ${GTK3_INCLUDE_DIRS} ${APPINDICATOR_INCLUDE_DIRS} ${GEOCLUE_INCLUDE_DIRS})
+    target_compile_options(duskplug PRIVATE ${GEOCLUE_CFLAGS})
     target_sources(duskplug_core PRIVATE src/update_apply_linux.cpp)
     target_link_libraries(duskplug PRIVATE
         duskplug_core
         ${GTK3_LIBRARIES}
         ${APPINDICATOR_LIBRARIES}
-        PkgConfig::GEOCLUE
+        ${GEOCLUE_LIBRARIES}
         ${SYSTEMD_LIBRARIES})
 endif()
 
