@@ -2,7 +2,7 @@
 
 #include "../location_service.h"
 
-#include <gclue-simple.h>
+#include <libgeoclue-2.0/gclue-simple.h>
 #include <gio/gio.h>
 
 namespace {
