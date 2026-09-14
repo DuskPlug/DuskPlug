@@ -87,6 +87,7 @@ else()
         src/linux/activity_linux.cpp
     )
     target_include_directories(duskplug PRIVATE ${GTK3_INCLUDE_DIRS} ${APPINDICATOR_INCLUDE_DIRS} ${GEOCLUE_INCLUDE_DIRS})
+    target_compile_options(duskplug PRIVATE ${GEOCLUE_CFLAGS_OTHER})
     target_sources(duskplug_core PRIVATE src/update_apply_linux.cpp)
     target_link_libraries(duskplug PRIVATE duskplug_core ${GTK3_LIBRARIES} ${APPINDICATOR_LIBRARIES} ${GEOCLUE_LIBRARIES} ${SYSTEMD_LIBRARIES})
 endif()
