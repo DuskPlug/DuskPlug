@@ -587,9 +587,9 @@ void RebuildTrayMenu() {
     g_app.brightnessSubMenu = CreatePopupMenu();
     AppendMenuW(
         g_app.brightnessSubMenu,
-        MF_OWNERDRAW | MF_GRAYED | MF_DISABLED,
+        MF_OWNERDRAW,
         CMD_SCREEN_BRIGHTNESS_PLACEHOLDER,
-        nullptr);
+        L"");
     g_app.brightnessMenuIndex = GetMenuItemCount(g_app.menu);
     AppendMenuW(
         g_app.menu,
@@ -1430,10 +1430,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         if (enabled == g_app.smart.IsScreenBrightnessEnabled()) {
             return;
         }
-        const bool enabling = enabled;
-        g_app.smart.ToggleScreenBrightnessEnabled();
+        g_app.smart.SetScreenBrightnessEnabled(enabled);
         UpdateContextMenuChecks();
-        if (enabling && g_app.smart.IsScreenBrightnessEnabled()) {
+        if (enabled) {
             ShowSetupBalloon(L"Automatic screen brightness is now on.");
         }
     };

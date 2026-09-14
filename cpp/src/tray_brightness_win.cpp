@@ -12,6 +12,7 @@ constexpr wchar_t kPopupClass[] = L"DuskPlugBrightnessPopup";
 
 constexpr int kTrackId = 3001;
 constexpr int kLabelId = 3002;
+constexpr int kAutoCheckId = 3003;
 constexpr int kPopupWidth = 220;
 constexpr int kSliderSectionHeight = 54;
 constexpr int kAutoRowHeight = 24;
@@ -41,13 +42,23 @@ bool g_popupVisible = false;
 
 int g_pendingApplyPercent = -1;
 int g_lastAppliedPercent = -1;
+RECT g_lastPanelScreenRect{};
+
+bool RectsNearEqual(const RECT& a, const RECT& b) {
+    return a.left == b.left
+        && a.top == b.top
+        && a.right == b.right
+        && a.bottom == b.bottom;
+}
 
 void UpdateLabelText();
 void InstallInputHooks();
 void UninstallInputHooks();
 void ScheduleBrightnessApply(int percent);
 void FlushBrightnessApply();
-void PaintAutoRow(HDC dc, const RECT& clientRect);
+void SyncAutoCheckboxState();
+void PaintAutoRowSeparator(HDC dc, const RECT& clientRect);
+void ToggleAutomaticFromPanel();
 
 int ClampPercent(int percent) {
     if (percent < 0) {
@@ -80,6 +91,13 @@ bool TrackScreenRect(RECT& outRect) {
 }
 
 bool AutoRowScreenRect(RECT& outRect) {
+    if (g_popup) {
+        HWND check = GetDlgItem(g_popup, kAutoCheckId);
+        if (check && GetWindowRect(check, &outRect)) {
+            return true;
+        }
+    }
+
     RECT popupRect{};
     if (!PopupScreenRect(popupRect)) {
         return false;
@@ -125,6 +143,49 @@ void FlushBrightnessApply() {
     g_pendingApplyPercent = -1;
 }
 
+void SyncAutoCheckboxState() {
+    if (!g_popup) {
+        return;
+    }
+
+    HWND check = GetDlgItem(g_popup, kAutoCheckId);
+    if (!check) {
+        return;
+    }
+
+    const bool enabled = g_callbacks.isAutoEnabled && g_callbacks.isAutoEnabled();
+    SendMessageW(check, BM_SETCHECK, enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+    RedrawWindow(check, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE);
+}
+
+void ToggleAutomaticFromPanel() {
+    const bool enabled = g_callbacks.isAutoEnabled && g_callbacks.isAutoEnabled();
+    if (g_callbacks.setAutoEnabled) {
+        g_callbacks.setAutoEnabled(!enabled);
+    }
+    SyncAutoCheckboxState();
+}
+
+void DisableAutomaticIfEnabled() {
+    if (g_callbacks.isAutoEnabled && g_callbacks.isAutoEnabled() && g_callbacks.setAutoEnabled) {
+        g_callbacks.setAutoEnabled(false);
+        SyncAutoCheckboxState();
+    }
+}
+
+int CurrentTrackPercent() {
+    if (!g_popup) {
+        return 50;
+    }
+
+    HWND track = GetDlgItem(g_popup, kTrackId);
+    if (!track) {
+        return 50;
+    }
+
+    return static_cast<int>(SendMessageW(track, TBM_GETPOS, 0, 0));
+}
+
 void ApplyTrackPercent(int percent, bool scheduleApply) {
     if (!g_popup) {
         return;
@@ -142,8 +203,31 @@ void ApplyTrackPercent(int percent, bool scheduleApply) {
     UpdateLabelText();
 
     if (scheduleApply) {
+        DisableAutomaticIfEnabled();
         ScheduleBrightnessApply(percent);
     }
+}
+
+bool AdjustBrightnessByWheel(POINT screenPt, short wheelDelta) {
+    if (!g_popup || wheelDelta == 0) {
+        return false;
+    }
+
+    RECT popupRect{};
+    if (!PopupScreenRect(popupRect) || PtInRect(&popupRect, screenPt) == FALSE) {
+        return false;
+    }
+
+    constexpr int kWheelStep = 5;
+    int percent = CurrentTrackPercent();
+    if (wheelDelta > 0) {
+        percent += kWheelStep;
+    } else {
+        percent -= kWheelStep;
+    }
+
+    ApplyTrackPercent(percent, true);
+    return true;
 }
 
 void UpdateLabelText() {
@@ -175,35 +259,13 @@ void SetPercentFromScreenPoint(int screenX, int screenY, bool scheduleApply) {
     ApplyTrackPercent(PercentFromTrackPoint(track, pt.x), scheduleApply);
 }
 
-void PaintAutoRow(HDC dc, const RECT& clientRect) {
-    RECT autoRow = clientRect;
-    autoRow.top = kAutoRowTop;
-    autoRow.bottom = kPopupHeight;
-    FillRect(dc, &autoRow, GetSysColorBrush(COLOR_MENU));
-
+void PaintAutoRowSeparator(HDC dc, const RECT& clientRect) {
     HPEN separator = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_3DSHADOW));
     HPEN previousPen = reinterpret_cast<HPEN>(SelectObject(dc, separator));
-    MoveToEx(dc, autoRow.left + 1, kAutoRowTop, nullptr);
-    LineTo(dc, autoRow.right - 1, kAutoRowTop);
+    MoveToEx(dc, clientRect.left + 1, kAutoRowTop, nullptr);
+    LineTo(dc, clientRect.right - 1, kAutoRowTop);
     SelectObject(dc, previousPen);
     DeleteObject(separator);
-
-    const bool autoEnabled = g_callbacks.isAutoEnabled && g_callbacks.isAutoEnabled();
-    const int checkSize = GetSystemMetrics(SM_CXMENUCHECK);
-    const int checkX = autoRow.left + 12;
-    const int checkY = autoRow.top + ((autoRow.bottom - autoRow.top - checkSize) / 2);
-    RECT checkRect = {checkX, checkY, checkX + checkSize, checkY + checkSize};
-    DrawFrameControl(
-        dc,
-        &checkRect,
-        DFC_MENU,
-        autoEnabled ? DFCS_MENUCHECK | DFCS_CHECKED : DFCS_MENUCHECK);
-
-    SetBkMode(dc, TRANSPARENT);
-    SetTextColor(dc, GetSysColor(COLOR_MENUTEXT));
-    RECT textRect = autoRow;
-    textRect.left = checkX + checkSize + 8;
-    DrawTextW(dc, L"Automatic", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 }
 
 void UpdateHoverCursor(POINT screenPt) {
@@ -243,11 +305,10 @@ MouseHandleResult HandlePanelMouse(UINT message, POINT screenPt) {
         UpdateHoverCursor(screenPt);
     }
 
-    if (message == WM_LBUTTONDOWN && inAutoRow) {
-        if (g_callbacks.setAutoEnabled && g_callbacks.isAutoEnabled) {
-            g_callbacks.setAutoEnabled(!g_callbacks.isAutoEnabled());
+    if ((message == WM_LBUTTONDOWN || message == WM_LBUTTONUP) && inAutoRow) {
+        if (message == WM_LBUTTONUP) {
+            ToggleAutomaticFromPanel();
         }
-        InvalidateRect(g_popup, nullptr, FALSE);
         return MouseHandleResult::HandledBlock;
     }
 
@@ -292,6 +353,13 @@ LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam) {
             }
             break;
         }
+        case WM_MOUSEWHEEL: {
+            const short delta = static_cast<short>(HIWORD(info->mouseData));
+            if (AdjustBrightnessByWheel(screenPt, delta)) {
+                return 1;
+            }
+            break;
+        }
         default:
             break;
         }
@@ -316,6 +384,19 @@ LRESULT CALLBACK BrightnessMenuFilterProc(int code, WPARAM wParam, LPARAM lParam
                 }
                 const MouseHandleResult handled = HandlePanelMouse(msg->message, screenPt);
                 if (handled != MouseHandleResult::NotHandled) {
+                    return 1;
+                }
+                break;
+            }
+            case WM_MOUSEWHEEL: {
+                POINT screenPt = msg->pt;
+                if ((screenPt.x | screenPt.y) == 0) {
+                    const DWORD pos = GetMessagePos();
+                    screenPt.x = GET_X_LPARAM(pos);
+                    screenPt.y = GET_Y_LPARAM(pos);
+                }
+                const short delta = static_cast<short>(HIWORD(msg->wParam));
+                if (AdjustBrightnessByWheel(screenPt, delta)) {
                     return 1;
                 }
                 break;
@@ -360,10 +441,21 @@ LRESULT CALLBACK BrightnessPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         HDC dc = BeginPaint(hwnd, &ps);
         RECT clientRect{};
         GetClientRect(hwnd, &clientRect);
-        PaintAutoRow(dc, clientRect);
+        PaintAutoRowSeparator(dc, clientRect);
         EndPaint(hwnd, &ps);
         return 0;
     }
+
+    case WM_COMMAND:
+        if (LOWORD(wParam) == kAutoCheckId && HIWORD(wParam) == BN_CLICKED) {
+            const bool checked = SendMessageW(GetDlgItem(hwnd, kAutoCheckId), BM_GETCHECK, 0, 0) == BST_CHECKED;
+            if (g_callbacks.setAutoEnabled) {
+                g_callbacks.setAutoEnabled(checked);
+            }
+            SyncAutoCheckboxState();
+            return 0;
+        }
+        break;
 
     case WM_ERASEBKGND: {
         RECT rc{};
@@ -379,6 +471,15 @@ LRESULT CALLBACK BrightnessPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         }
         break;
 
+    case WM_MOUSEWHEEL: {
+        POINT screenPt{};
+        GetCursorPos(&screenPt);
+        if (AdjustBrightnessByWheel(screenPt, GET_WHEEL_DELTA_WPARAM(wParam))) {
+            return 0;
+        }
+        break;
+    }
+
     case WM_HSCROLL:
         if (reinterpret_cast<HWND>(lParam) == GetDlgItem(hwnd, kTrackId)) {
             if (!g_updatingTrack) {
@@ -387,7 +488,7 @@ LRESULT CALLBACK BrightnessPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     TBM_GETPOS,
                     0,
                     0));
-                ScheduleBrightnessApply(percent);
+                ApplyTrackPercent(percent, true);
             }
             UpdateLabelText();
         }
@@ -396,6 +497,7 @@ LRESULT CALLBACK BrightnessPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_BRIGHTNESS_SYNC: {
         const int percent = g_callbacks.getPercent ? g_callbacks.getPercent() : 50;
         ApplyTrackPercent(percent, false);
+        SyncAutoCheckboxState();
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -468,6 +570,47 @@ void EnsurePopupCreated() {
         GetModuleHandleW(nullptr),
         nullptr);
     SendMessageW(GetDlgItem(g_popup, kTrackId), TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
+
+    CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Automatic",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+        8,
+        kAutoRowTop + 2,
+        kPopupWidth - 16,
+        kAutoRowHeight - 4,
+        g_popup,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kAutoCheckId)),
+        GetModuleHandleW(nullptr),
+        nullptr);
+}
+
+bool GetPlaceholderScreenRect(RECT& outRect) {
+    if (!g_brightnessSubMenu) {
+        return false;
+    }
+
+    // uItem is the zero-based index, not the command ID.
+    if (g_owner && GetMenuItemRect(g_owner, g_brightnessSubMenu, 0, &outRect)) {
+        return true;
+    }
+    return GetMenuItemRect(nullptr, g_brightnessSubMenu, 0, &outRect) != FALSE;
+}
+
+bool ScreenRectFromDrawItem(const DRAWITEMSTRUCT* draw, RECT& outRect) {
+    if (!draw) {
+        return false;
+    }
+
+    outRect = draw->rcItem;
+    const HWND menuWnd = WindowFromDC(draw->hDC);
+    if (menuWnd) {
+        MapWindowPoints(menuWnd, nullptr, reinterpret_cast<LPPOINT>(&outRect), 2);
+        return true;
+    }
+
+    return GetPlaceholderScreenRect(outRect);
 }
 
 }  // namespace
@@ -513,20 +656,35 @@ void ShowBrightnessPanelAtRect(const RECT& itemRect) {
         return;
     }
 
-    SendMessageW(g_popup, WM_BRIGHTNESS_SYNC, 0, 0);
-    g_pendingApplyPercent = -1;
-    g_lastAppliedPercent = g_callbacks.getPercent ? ClampPercent(g_callbacks.getPercent()) : 50;
+    const bool firstShow = !g_popupVisible;
+    if (g_popupVisible && RectsNearEqual(g_lastPanelScreenRect, itemRect)) {
+        return;
+    }
 
     int x = itemRect.left;
     int y = itemRect.top;
+    int width = itemRect.right - itemRect.left;
+    int height = itemRect.bottom - itemRect.top;
+    if (width < kPopupWidth) {
+        width = kPopupWidth;
+    }
+    if (height < kPopupHeight) {
+        height = kPopupHeight;
+    }
 
     const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    if (x + kPopupWidth > screenWidth) {
-        x = (screenWidth > kPopupWidth) ? (screenWidth - kPopupWidth) : 0;
+    if (x + width > screenWidth) {
+        x = (screenWidth > width) ? (screenWidth - width) : 0;
     }
-    if (y + kPopupHeight > screenHeight) {
-        y = (screenHeight > kPopupHeight) ? (screenHeight - kPopupHeight) : 0;
+    if (y + height > screenHeight) {
+        y = (screenHeight > height) ? (screenHeight - height) : 0;
+    }
+
+    if (firstShow) {
+        SendMessageW(g_popup, WM_BRIGHTNESS_SYNC, 0, 0);
+        g_pendingApplyPercent = -1;
+        g_lastAppliedPercent = g_callbacks.getPercent ? ClampPercent(g_callbacks.getPercent()) : 50;
     }
 
     SetWindowPos(
@@ -534,11 +692,12 @@ void ShowBrightnessPanelAtRect(const RECT& itemRect) {
         HWND_TOPMOST,
         x,
         y,
-        kPopupWidth,
-        kPopupHeight,
+        width,
+        height,
         SWP_SHOWWINDOW | SWP_NOACTIVATE);
     SetWindowPos(g_popup, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
+    g_lastPanelScreenRect = itemRect;
     g_popupVisible = true;
     g_dragging = false;
     InstallInputHooks();
@@ -552,7 +711,7 @@ void ShowBrightnessPanel(HWND owner, HMENU brightnessSubMenu) {
     g_brightnessSubMenu = brightnessSubMenu;
 
     RECT itemRect{};
-    if (!GetMenuItemRect(owner, brightnessSubMenu, CMD_SCREEN_BRIGHTNESS_PLACEHOLDER, &itemRect)) {
+    if (!GetPlaceholderScreenRect(itemRect)) {
         return;
     }
 
@@ -561,6 +720,7 @@ void ShowBrightnessPanel(HWND owner, HMENU brightnessSubMenu) {
 
 void RequestShowBrightnessPanel(HWND owner, HMENU brightnessSubMenu) {
     g_pendingSubMenu = brightnessSubMenu;
+    g_brightnessSubMenu = brightnessSubMenu;
     PostMessageW(owner, WM_TRAY_BRIGHTNESS_SHOW, 0, 0);
 }
 
@@ -568,6 +728,7 @@ void HideBrightnessPanel() {
     FlushBrightnessApply();
     g_dragging = false;
     g_popupVisible = false;
+    g_lastPanelScreenRect = {};
     g_brightnessSubMenu = nullptr;
     g_pendingSubMenu = nullptr;
     if (g_popup) {
@@ -590,12 +751,16 @@ void DrawBrightnessPlaceholderItem(const DRAWITEMSTRUCT* draw) {
     }
 
     FillRect(draw->hDC, &draw->rcItem, GetSysColorBrush(COLOR_MENU));
-    ShowBrightnessPanelAtRect(draw->rcItem);
+
+    RECT screenRect{};
+    if (ScreenRectFromDrawItem(draw, screenRect)) {
+        ShowBrightnessPanelAtRect(screenRect);
+    }
 }
 
 void SyncBrightnessPanelAutoState() {
     if (g_popup && IsWindowVisible(g_popup)) {
-        InvalidateRect(g_popup, nullptr, FALSE);
+        SyncAutoCheckboxState();
     }
 }
 
