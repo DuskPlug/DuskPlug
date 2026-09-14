@@ -105,8 +105,14 @@ UpdateInfo CheckForUpdates(InstallKind kind) {
     SetLastUpdateCheckMs(CurrentTimeMs());
 
     const HttpResponse response = HttpRequest("GET", kUpdateManifestUrl, {}, std::string(), 30000);
+    if (response.statusCode == 404) {
+        info.manifestMissing = true;
+        return info;
+    }
     if (response.statusCode != 200 || response.body.empty()) {
-        info.error = response.error.empty() ? "Could not fetch update manifest." : response.error;
+        info.error = response.error.empty()
+            ? "Could not reach the update server. Check your internet connection."
+            : response.error;
         return info;
     }
 

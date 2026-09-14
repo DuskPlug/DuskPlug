@@ -12,6 +12,7 @@ struct UpdateInfo {
     std::string notesUrl;
     std::string error;
     bool available = false;
+    bool manifestMissing = false;
 };
 
 constexpr const char* kUpdateManifestUrl =

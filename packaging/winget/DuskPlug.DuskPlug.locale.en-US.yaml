@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
 PackageIdentifier: DuskPlug.DuskPlug
-PackageVersion: 1.0.1
+PackageVersion: 1.0.2
 PackageLocale: en-US
 Publisher: DuskPlug
 PublisherUrl: https://github.com/DuskPlug
@@ -26,6 +26,6 @@ Tags:
 - system-tray
 - tuya
 - windows
-ReleaseNotesUrl: https://github.com/DuskPlug/DuskPlug/releases/tag/v1.0.1
+ReleaseNotesUrl: https://github.com/DuskPlug/DuskPlug/releases/tag/v1.0.2
 ManifestType: defaultLocale
 ManifestVersion: 1.9.0

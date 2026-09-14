@@ -426,11 +426,25 @@ void HandleUpdateCheckResult(const UpdateInfo& info, bool showNoUpdateMessage) {
     UpdateApplyMenuItem();
 
     if (!info.error.empty()) {
-        MessageBoxW(
-            g_app.hwnd,
-            Utf8ToWide(info.error).c_str(),
-            L"DuskPlug — Updates",
-            MB_ICONWARNING | MB_OK);
+        if (showNoUpdateMessage) {
+            MessageBoxW(
+                g_app.hwnd,
+                Utf8ToWide(info.error).c_str(),
+                L"DuskPlug — Updates",
+                MB_ICONWARNING | MB_OK);
+        }
+        return;
+    }
+
+    if (info.manifestMissing) {
+        if (showNoUpdateMessage) {
+            MessageBoxW(
+                g_app.hwnd,
+                L"No update manifest is published yet for this release.\n\n"
+                L"See https://github.com/DuskPlug/DuskPlug/releases for downloads.",
+                L"DuskPlug — Updates",
+                MB_ICONINFORMATION | MB_OK);
+        }
         return;
     }
 

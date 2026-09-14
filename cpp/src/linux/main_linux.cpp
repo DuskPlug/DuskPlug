@@ -235,7 +235,17 @@ void HandleUpdateCheckResult(const UpdateInfo& info, bool showNoUpdateMessage) {
     UpdateApplyMenuItem();
 
     if (!info.error.empty()) {
-        ShowMessage(info.error);
+        if (showNoUpdateMessage) {
+            ShowMessage(info.error);
+        }
+        return;
+    }
+    if (info.manifestMissing) {
+        if (showNoUpdateMessage) {
+            ShowMessage(
+                "No update manifest is published yet for this release.\n\n"
+                "See https://github.com/DuskPlug/DuskPlug/releases for downloads.");
+        }
         return;
     }
     if (!info.available) {
