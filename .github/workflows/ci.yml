@@ -195,18 +195,18 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
           $notesUrl = "https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
-          $args = @(
-            '-Version', $version,
-            '-NotesUrl', $notesUrl,
-            '-OutFile', 'latest.json',
-            '-WindowsMsi', 'release-artifacts/release-windows/DuskPlug.msi',
-            '-WindowsZip', 'release-artifacts/release-windows/DuskPlug-Windows.zip',
-            '-MacosZip', 'release-artifacts/release-macos/DuskPlug-macOS.zip'
-          )
-          if (Test-Path 'release-artifacts/release-linux/DuskPlug-Linux-x64.tar.gz') {
-            $args += @('-LinuxTarball', 'release-artifacts/release-linux/DuskPlug-Linux-x64.tar.gz')
+          $manifestArgs = @{
+            Version    = $version
+            NotesUrl   = $notesUrl
+            OutFile    = 'latest.json'
+            WindowsMsi = 'release-artifacts/release-windows/DuskPlug.msi'
+            WindowsZip = 'release-artifacts/release-windows/DuskPlug-Windows.zip'
+            MacosZip   = 'release-artifacts/release-macos/DuskPlug-macOS.zip'
           }
-          & scripts/generate-latest-json.ps1 @args
+          if (Test-Path 'release-artifacts/release-linux/DuskPlug-Linux-x64.tar.gz') {
+            $manifestArgs.LinuxTarball = 'release-artifacts/release-linux/DuskPlug-Linux-x64.tar.gz'
+          }
+          & scripts/generate-latest-json.ps1 @manifestArgs
 
       - name: Upload latest.json to release
         uses: softprops/action-gh-release@v2
