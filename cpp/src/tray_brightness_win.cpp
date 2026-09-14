@@ -503,18 +503,13 @@ void OnTrayContextMenuOpening() {
     InstallInputHooks();
 }
 
-void ShowBrightnessPanel(HWND owner, HMENU brightnessSubMenu) {
+void ShowBrightnessPanelAtRect(const RECT& itemRect) {
     if (!g_callbacks.isAvailable || !g_callbacks.isAvailable()) {
         return;
     }
 
     EnsurePopupCreated();
-    if (!g_popup || !brightnessSubMenu) {
-        return;
-    }
-
-    RECT itemRect{};
-    if (!GetMenuItemRect(owner, brightnessSubMenu, CMD_SCREEN_BRIGHTNESS_PLACEHOLDER, &itemRect)) {
+    if (!g_popup) {
         return;
     }
 
@@ -542,11 +537,26 @@ void ShowBrightnessPanel(HWND owner, HMENU brightnessSubMenu) {
         kPopupWidth,
         kPopupHeight,
         SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    SetWindowPos(g_popup, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
-    g_brightnessSubMenu = brightnessSubMenu;
     g_popupVisible = true;
     g_dragging = false;
     InstallInputHooks();
+}
+
+void ShowBrightnessPanel(HWND owner, HMENU brightnessSubMenu) {
+    if (!brightnessSubMenu) {
+        return;
+    }
+
+    g_brightnessSubMenu = brightnessSubMenu;
+
+    RECT itemRect{};
+    if (!GetMenuItemRect(owner, brightnessSubMenu, CMD_SCREEN_BRIGHTNESS_PLACEHOLDER, &itemRect)) {
+        return;
+    }
+
+    ShowBrightnessPanelAtRect(itemRect);
 }
 
 void RequestShowBrightnessPanel(HWND owner, HMENU brightnessSubMenu) {
@@ -580,6 +590,7 @@ void DrawBrightnessPlaceholderItem(const DRAWITEMSTRUCT* draw) {
     }
 
     FillRect(draw->hDC, &draw->rcItem, GetSysColorBrush(COLOR_MENU));
+    ShowBrightnessPanelAtRect(draw->rcItem);
 }
 
 void SyncBrightnessPanelAutoState() {

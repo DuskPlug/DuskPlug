@@ -1126,7 +1126,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             && g_app.brightnessController
             && g_app.brightnessController->AnyControllable()) {
             RequestShowBrightnessPanel(g_app.hwnd, g_app.brightnessSubMenu);
-        } else {
+        } else if (menu != g_app.menu && menu != g_app.brightnessSubMenu) {
             HideBrightnessPanel();
         }
         return 0;
