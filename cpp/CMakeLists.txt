@@ -50,7 +50,7 @@ if(WIN32)
         src/app.rc
     )
     target_sources(duskplug_core PRIVATE src/update_apply_win.cpp)
-    target_link_libraries(DuskPlug PRIVATE duskplug_core winhttp advapi32 shell32 comctl32 ole32 oleaut32 uuid user32 gdi32 wtsapi32 wbemuuid PowrProf dxva2)
+    target_link_libraries(DuskPlug PRIVATE duskplug_core winhttp advapi32 shell32 comctl32 ole32 oleaut32 comsuppw uuid user32 gdi32 wtsapi32 wbemuuid PowrProf dxva2)
     set_target_properties(DuskPlug PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
     )
@@ -66,13 +66,14 @@ elseif(APPLE)
         src/macos/location_macos.mm
         src/macos/activity_macos.mm
         src/macos/brightness_macos.mm
+        src/settings_page.cpp
     )
     set_target_properties(DuskPlug PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/macos/Info.plist"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
     )
     target_sources(duskplug_core PRIVATE src/update_apply_macos.mm)
-    target_link_libraries(DuskPlug PRIVATE duskplug_core "-framework AppKit" "-framework CoreLocation" "-framework ServiceManagement" "-framework IOKit")
+    target_link_libraries(DuskPlug PRIVATE duskplug_core "-framework AppKit" "-framework CoreLocation" "-framework ServiceManagement" "-framework IOKit" "-framework WebKit")
 else()
     target_sources(duskplug_core PRIVATE src/http_curl.cpp)
     find_package(PkgConfig REQUIRED)
@@ -96,6 +97,7 @@ else()
             src/linux/location_linux.cpp
             src/linux/activity_linux.cpp
             src/linux/brightness_linux.cpp
+            src/settings_page.cpp
         )
         target_include_directories(duskplug PRIVATE ${GTK3_INCLUDE_DIRS} ${WEBKIT_INCLUDE_DIRS} ${APPINDICATOR_INCLUDE_DIRS})
         target_link_libraries(duskplug PRIVATE

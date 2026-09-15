@@ -14,8 +14,8 @@
 @property(nonatomic, assign) AppConfig* config;
 @property(nonatomic, assign) const std::string* configPath;
 @property(nonatomic, assign) BOOL saved;
-@property(nonatomic, weak) WKWebView* webView;
-@property(nonatomic, weak) NSWindow* window;
+@property(nonatomic, assign) WKWebView* webView;
+@property(nonatomic, assign) NSWindow* window;
 - (void)evalScript:(const std::string&)script;
 - (void)handleMessage:(const std::string&)message;
 @end
