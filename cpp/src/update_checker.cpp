@@ -37,6 +37,7 @@ std::string ReadBinaryFile(const std::string& path) {
 const char* AssetKeyForInstallKind(InstallKind kind) {
     switch (kind) {
     case InstallKind::Msi:
+    case InstallKind::Winget:
         return "windows_msi";
     case InstallKind::Portable:
         return "windows_zip";

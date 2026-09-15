@@ -721,12 +721,7 @@ void HandleUpdateCheckResult(const UpdateInfo& info, bool showNoUpdateMessage) {
     }
 
     if (showNoUpdateMessage) {
-        const std::wstring prompt = L"DuskPlug " + Utf8ToWide(info.version)
-            + L" is available.\n\nDownload and install now?";
-        if (MessageBoxW(g_app.hwnd, prompt.c_str(), L"DuskPlug — Updates", MB_YESNO | MB_ICONQUESTION)
-            == IDYES) {
-            RunApplyUpdate(false);
-        }
+        RunApplyUpdate(false);
         return;
     }
 

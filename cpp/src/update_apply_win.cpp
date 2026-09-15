@@ -202,6 +202,7 @@ ApplyUpdateResult ApplyUpdate(const UpdateInfo& info, InstallKind kind) {
 
     switch (kind) {
     case InstallKind::Msi:
+    case InstallKind::Winget:
         return ApplyMsiUpdate(info);
     case InstallKind::Portable:
         return ApplyPortableUpdate(info);

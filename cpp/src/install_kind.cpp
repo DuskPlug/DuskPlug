@@ -95,21 +95,14 @@ bool HiveHasDuskPlugMsi(HKEY root, REGSAM wow) {
     return false;
 }
 
-bool IsMsiInstalled() {
-    constexpr const wchar_t* kLegacyUninstallKey =
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{89E986DB-8F9D-41AA-9F37-862A15944D0A}";
+bool UninstallKeyExists(HKEY root, REGSAM access, const wchar_t* subKey) {
     HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kLegacyUninstallKey, 0, KEY_READ | KEY_WOW64_64KEY, &key) == ERROR_SUCCESS) {
+    const LONG rc = RegOpenKeyExW(root, subKey, 0, KEY_READ | access, &key);
+    if (rc == ERROR_SUCCESS) {
         RegCloseKey(key);
         return true;
     }
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kLegacyUninstallKey, 0, KEY_READ, &key) == ERROR_SUCCESS) {
-        RegCloseKey(key);
-        return true;
-    }
-    return HiveHasDuskPlugMsi(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY)
-        || HiveHasDuskPlugMsi(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY)
-        || HiveHasDuskPlugMsi(HKEY_CURRENT_USER, 0);
+    return false;
 }
 
 bool IsUnderProgramFiles(const std::string& path) {
@@ -119,6 +112,29 @@ bool IsUnderProgramFiles(const std::string& path) {
     }
     const std::string pf = WideToUtf8(programFiles);
     return path.rfind(pf, 0) == 0;
+}
+
+bool IsMsiInstalled() {
+    static const wchar_t* kKnownUninstallKeys[] = {
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{89E986DB-8F9D-41AA-9F37-862A15944D0A}",
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{FEA49D34-B91A-440D-8A25-277C95D44D25}",
+    };
+
+    for (const wchar_t* subKey : kKnownUninstallKeys) {
+        if (UninstallKeyExists(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, subKey)
+            || UninstallKeyExists(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, subKey)
+            || UninstallKeyExists(HKEY_CURRENT_USER, 0, subKey)) {
+            return true;
+        }
+    }
+
+    return HiveHasDuskPlugMsi(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY)
+        || HiveHasDuskPlugMsi(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY)
+        || HiveHasDuskPlugMsi(HKEY_CURRENT_USER, 0);
+}
+
+bool IsDuskPlugProgramFilesInstall(const std::string& exeDir) {
+    return IsUnderProgramFiles(exeDir) && ContainsIgnoreCase(exeDir, "\\duskplug");
 }
 #endif
 
@@ -134,11 +150,8 @@ InstallKind DetectInstallKind() {
     if (ContainsIgnoreCase(exeDir, "\\scoop\\apps\\duskplug\\")) {
         return InstallKind::Scoop;
     }
-    if (IsMsiInstalled() && IsUnderProgramFiles(exeDir)) {
+    if (IsDuskPlugProgramFilesInstall(exeDir) || (IsMsiInstalled() && IsUnderProgramFiles(exeDir))) {
         return InstallKind::Msi;
-    }
-    if (IsUnderProgramFiles(exeDir)) {
-        return InstallKind::Winget;
     }
     return InstallKind::Portable;
 #endif
@@ -158,8 +171,8 @@ std::string PackageManagerUpdateHint(InstallKind kind) {
 bool SupportsInAppUpdate(InstallKind kind) {
     switch (kind) {
     case InstallKind::Scoop:
-    case InstallKind::Winget:
         return false;
+    case InstallKind::Winget:
     case InstallKind::Msi:
     case InstallKind::Portable:
     case InstallKind::LinuxTarball:
