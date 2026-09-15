@@ -80,28 +80,32 @@ else()
     target_include_directories(duskplug_core PUBLIC ${CURL_INCLUDE_DIRS})
     target_link_libraries(duskplug_core PUBLIC ${CURL_LIBRARIES})
 
-    pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
-    pkg_check_modules(WEBKIT REQUIRED webkit2gtk-4.0)
-    pkg_check_modules(APPINDICATOR REQUIRED ayatana-appindicator3-0.1)
-    pkg_check_modules(GEOCLUE REQUIRED IMPORTED_TARGET libgeoclue-2.0)
-    pkg_check_modules(SYSTEMD REQUIRED libsystemd)
-
-    add_executable(duskplug
-        src/linux/main_linux.cpp
-        src/linux/settings_gtk.cpp
-        src/linux/location_linux.cpp
-        src/linux/activity_linux.cpp
-        src/linux/brightness_linux.cpp
-    )
-    target_include_directories(duskplug PRIVATE ${GTK3_INCLUDE_DIRS} ${WEBKIT_INCLUDE_DIRS} ${APPINDICATOR_INCLUDE_DIRS})
     target_sources(duskplug_core PRIVATE src/update_apply_linux.cpp)
-    target_link_libraries(duskplug PRIVATE
-        duskplug_core
-        ${GTK3_LIBRARIES}
-        ${WEBKIT_LIBRARIES}
-        ${APPINDICATOR_LIBRARIES}
-        PkgConfig::GEOCLUE
-        ${SYSTEMD_LIBRARIES})
+
+    option(DUSKPLUG_BUILD_LINUX_APP "Build Linux tray app (requires GTK/WebKit)" ON)
+    if(DUSKPLUG_BUILD_LINUX_APP)
+        pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+        pkg_check_modules(WEBKIT REQUIRED webkit2gtk-4.0)
+        pkg_check_modules(APPINDICATOR REQUIRED ayatana-appindicator3-0.1)
+        pkg_check_modules(GEOCLUE REQUIRED IMPORTED_TARGET libgeoclue-2.0)
+        pkg_check_modules(SYSTEMD REQUIRED libsystemd)
+
+        add_executable(duskplug
+            src/linux/main_linux.cpp
+            src/linux/settings_gtk.cpp
+            src/linux/location_linux.cpp
+            src/linux/activity_linux.cpp
+            src/linux/brightness_linux.cpp
+        )
+        target_include_directories(duskplug PRIVATE ${GTK3_INCLUDE_DIRS} ${WEBKIT_INCLUDE_DIRS} ${APPINDICATOR_INCLUDE_DIRS})
+        target_link_libraries(duskplug PRIVATE
+            duskplug_core
+            ${GTK3_LIBRARIES}
+            ${WEBKIT_LIBRARIES}
+            ${APPINDICATOR_LIBRARIES}
+            PkgConfig::GEOCLUE
+            ${SYSTEMD_LIBRARIES})
+    endif()
 endif()
 
 enable_testing()
