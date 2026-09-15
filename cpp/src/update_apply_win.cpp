@@ -106,6 +106,35 @@ bool LaunchUpdatedExe(const std::string& exePath) {
     return true;
 }
 
+bool LaunchElevatedPowerShell(const std::wstring& arguments) {
+    const HINSTANCE rc = ShellExecuteW(
+        nullptr,
+        L"runas",
+        L"powershell.exe",
+        arguments.c_str(),
+        nullptr,
+        SW_HIDE);
+    return reinterpret_cast<INT_PTR>(rc) > 32;
+}
+
+bool WriteMsiRestartHelperScript(const std::string& scriptPath) {
+    const std::string script =
+        "param(\r\n"
+        "  [Parameter(Mandatory=$true)][int] $ParentPid,\r\n"
+        "  [Parameter(Mandatory=$true)][string] $MsiPath,\r\n"
+        "  [Parameter(Mandatory=$true)][string] $ExePath\r\n"
+        ")\r\n"
+        "while (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {\r\n"
+        "  Start-Sleep -Milliseconds 300\r\n"
+        "}\r\n"
+        "$proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/i', $MsiPath, '/quiet', '/norestart') -PassThru -Wait\r\n"
+        "if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq 1641) {\r\n"
+        "  Start-Process -FilePath $ExePath\r\n"
+        "}\r\n";
+
+    return WriteTextFile(scriptPath, script);
+}
+
 ApplyUpdateResult ApplyMsiUpdate(const UpdateInfo& info) {
     ApplyUpdateResult result{};
     const std::string downloadPath = GetTempDirectory() + "\\DuskPlug-update.msi";
@@ -117,15 +146,25 @@ ApplyUpdateResult ApplyMsiUpdate(const UpdateInfo& info) {
         return result;
     }
 
-    const std::wstring args = L"/i \"" + Utf8ToWide(downloadPath) + L"\" /quiet /norestart";
-    const HINSTANCE rc = ShellExecuteW(
-        nullptr,
-        L"runas",
-        L"msiexec.exe",
-        args.c_str(),
-        nullptr,
-        SW_HIDE);
-    if (reinterpret_cast<INT_PTR>(rc) <= 32) {
+    const std::string scriptPath = GetTempDirectory() + "\\DuskPlug-apply-update.ps1";
+    const std::string exePath = GetExeDirectory() + "\\DuskPlug.exe";
+    if (!WriteMsiRestartHelperScript(scriptPath)) {
+        result.error = "Could not prepare update restart helper.";
+        return result;
+    }
+
+    const std::wstring arguments =
+        L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \""
+        + Utf8ToWide(scriptPath)
+        + L"\" -ParentPid "
+        + std::to_wstring(GetCurrentProcessId())
+        + L" -MsiPath \""
+        + Utf8ToWide(downloadPath)
+        + L"\" -ExePath \""
+        + Utf8ToWide(exePath)
+        + L"\"";
+
+    if (!LaunchElevatedPowerShell(arguments)) {
         result.error = "Could not start elevated installer (UAC may have been cancelled).";
         return result;
     }
