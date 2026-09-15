@@ -202,6 +202,8 @@ void PersistConfigToDisk() {
     SaveAppConfig(g_app.configPath, g_app.config);
 }
 
+void StartAutomationTimers(DuskPlugAppDelegate* delegate);
+
 void SetEnabledDevicesAutomationMode(DeviceAutomationMode mode) {
     bool changed = false;
     for (auto& device : g_app.config.devices) {

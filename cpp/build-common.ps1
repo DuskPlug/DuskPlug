@@ -32,13 +32,28 @@ function Get-DuskPlugDepName {
     [IO.Path]::GetFileNameWithoutExtension($SourcePath) + '.d'
 }
 
+function Get-DuskPlugFileSha256Hex {
+    param([Parameter(Mandatory)][string]$Path)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            return ([BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', ''))
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Copy-IfChanged {
     param(
         [Parameter(Mandatory)][string]$From,
         [Parameter(Mandatory)][string]$To
     )
     if (Test-Path -LiteralPath $To) {
-        if ((Get-FileHash -LiteralPath $From).Hash -eq (Get-FileHash -LiteralPath $To).Hash) {
+        if ((Get-DuskPlugFileSha256Hex -Path $From) -eq (Get-DuskPlugFileSha256Hex -Path $To)) {
             return
         }
     }
