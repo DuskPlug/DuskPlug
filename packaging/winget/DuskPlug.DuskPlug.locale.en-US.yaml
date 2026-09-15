@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
 PackageIdentifier: DuskPlug.DuskPlug
-PackageVersion: 1.0.2
+PackageVersion: 1.0.10
 PackageLocale: en-US
 Publisher: DuskPlug
 PublisherUrl: https://github.com/DuskPlug
 PublisherSupportUrl: https://github.com/DuskPlug/DuskPlug/issues
 PrivacyUrl: https://github.com/DuskPlug/DuskPlug/blob/master/docs/PRIVACY.md
 PackageName: DuskPlug
-PackageUrl: https://github.com/DuskPlug/DuskPlug
+PackageUrl: https://duskplug.github.io/DuskPlug/
 License: MIT
 LicenseUrl: https://github.com/DuskPlug/DuskPlug/blob/master/LICENSE
 ShortDescription: Control a Tuya smart plug from the Windows tray with dusk/dawn and schedule modes.
@@ -26,6 +26,6 @@ Tags:
 - system-tray
 - tuya
 - windows
-ReleaseNotesUrl: https://github.com/DuskPlug/DuskPlug/releases/tag/v1.0.2
+ReleaseNotesUrl: https://github.com/DuskPlug/DuskPlug/releases/tag/v1.0.10
 ManifestType: defaultLocale
 ManifestVersion: 1.9.0
