@@ -19,6 +19,9 @@ SolarTimes ComputeSolarTimes(
     int month,
     int day);
 
+// Shift NOAA-formula solar minutes into civil local clock time.
+SolarTimes ApplyLocalUtcOffset(SolarTimes times, int offsetMinutes);
+
 bool IsDark(
     double latitude,
     double longitude,

@@ -2,6 +2,13 @@
 
 #include "config.h"
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -17,7 +24,27 @@ struct LocalDateTime {
     int day = 0;
     int hour = 0;
     int minute = 0;
+    int utcOffsetMinutes = 0;
 };
+
+int GetLocalUtcOffsetMinutes(const std::tm& local) {
+#ifdef _WIN32
+    TIME_ZONE_INFORMATION tzi{};
+    if (GetTimeZoneInformation(&tzi) == TIME_ZONE_ID_INVALID) {
+        return 0;
+    }
+    const LONG activeBias = (local.tm_isdst > 0) ? tzi.DaylightBias : tzi.StandardBias;
+    return static_cast<int>(-(tzi.Bias + activeBias));
+#elif defined(__APPLE__)
+    return static_cast<int>(local.tm_gmtoff / 60);
+#else
+#if defined(_GNU_SOURCE) || defined(__USE_MISC)
+    return static_cast<int>(local.tm_gmtoff / 60);
+#else
+    return 0;
+#endif
+#endif
+}
 
 LocalDateTime GetLocalDateTime() {
     const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -33,6 +60,7 @@ LocalDateTime GetLocalDateTime() {
         local.tm_mday,
         local.tm_hour,
         local.tm_min,
+        GetLocalUtcOffsetMinutes(local),
     };
 }
 
@@ -111,6 +139,12 @@ SolarTimes ComputeSolarTimes(
     return result;
 }
 
+SolarTimes ApplyLocalUtcOffset(SolarTimes times, int offsetMinutes) {
+    times.sunriseMinutes = NormalizeMinutes(static_cast<double>(times.sunriseMinutes + offsetMinutes));
+    times.sunsetMinutes = NormalizeMinutes(static_cast<double>(times.sunsetMinutes + offsetMinutes));
+    return times;
+}
+
 bool IsDarkWithOffsets(
     double latitude,
     double longitude,
@@ -119,12 +153,13 @@ bool IsDarkWithOffsets(
     SolarTimes* outTimes) {
     const LocalDateTime now = GetLocalDateTime();
 
-    const SolarTimes times = ComputeSolarTimes(
+    SolarTimes times = ComputeSolarTimes(
         latitude,
         longitude,
         now.year,
         now.month,
         now.day);
+    times = ApplyLocalUtcOffset(times, now.utcOffsetMinutes);
 
     if (outTimes) {
         *outTimes = times;

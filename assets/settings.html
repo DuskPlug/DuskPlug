@@ -170,12 +170,24 @@
       return { id: "", name: "My device", type: "plug", enabled: true, switchCode: "switch_1", brightnessCode: "", brightnessMin: 10, brightnessMax: 1000, mode: "manual", scheduleOnTime: "18:00", scheduleOffTime: "23:00", darkOffsetMinutes: 0, lightOffsetMinutes: 0, nightBrightness: 20, dayBrightness: 80, useBrightness: true };
     }
 
+    function beforeSunsetDisplay(device) {
+      const stored = Number(device.darkOffsetMinutes || 0);
+      return stored < 0 ? -stored : 0;
+    }
+
+    function afterSunriseDisplay(device) {
+      const stored = Number(device.lightOffsetMinutes || 0);
+      return stored < 0 ? -stored : 0;
+    }
+
     function deviceEditorHtml(device, prefix) {
       const isBulb = device.type === "bulb";
-      const modeHint = device.mode === "smart"
-        ? "Smart Mode is on — on at sunset, off at sunrise."
-        : device.mode === "schedule"
-          ? "Schedule Mode is on — uses the ON/OFF times below."
+      const isSmart = device.mode === "smart";
+      const isSchedule = device.mode === "schedule";
+      const modeHint = isSmart
+        ? "Smart Mode is on — on at sunset, off at sunrise. Use the offsets below to shift those times."
+        : isSchedule
+          ? "Schedule Mode is on — uses the fixed ON/OFF times below."
           : "Manual — control from the tray menu only.";
       return `
         <h2>${prefix === "single" ? "Device" : "Device settings"}</h2>
@@ -187,11 +199,14 @@
           <label>Automation mode<select data-field="mode"><option value="manual" ${device.mode === "manual" ? "selected" : ""}>Manual</option><option value="smart" ${device.mode === "smart" ? "selected" : ""}>Smart Mode (dusk/dawn)</option><option value="schedule" ${device.mode === "schedule" ? "selected" : ""}>Schedule Mode</option></select></label>
         </div>
         <p class="hint" style="margin-top:8px">${modeHint}</p>
-        <div class="grid cols-2" style="margin-top:12px">
+        <div class="grid cols-2 smart-only ${isSmart ? "" : "hidden"}" style="margin-top:12px">
+          <label>Before sunset (min)<input data-field="beforeSunsetMinutes" type="number" min="0" value="${beforeSunsetDisplay(device)}"></label>
+          <label>After sunrise (min)<input data-field="afterSunriseMinutes" type="number" min="0" value="${afterSunriseDisplay(device)}"></label>
+        </div>
+        <p class="hint smart-only ${isSmart ? "" : "hidden"}" style="margin-top:4px">Turn on this many minutes before sunset; stay on this many minutes after sunrise. Leave at 0 for exactly sunset and sunrise.</p>
+        <div class="grid cols-2 schedule-only ${isSchedule ? "" : "hidden"}" style="margin-top:12px">
           <label>Turn ON at<input data-field="scheduleOnTime" type="time" value="${(device.scheduleOnTime || "18:00").slice(0,5)}"></label>
           <label>Turn OFF at<input data-field="scheduleOffTime" type="time" value="${(device.scheduleOffTime || "23:00").slice(0,5)}"></label>
-          <label>After sunset (min)<input data-field="darkOffsetMinutes" type="number" value="${device.darkOffsetMinutes || 0}"></label>
-          <label>Before sunrise (min)<input data-field="lightOffsetMinutes" type="number" value="${device.lightOffsetMinutes || 0}"></label>
         </div>
         <div class="grid cols-2 bulb-only ${isBulb ? "" : "hidden"}" style="margin-top:12px">
           <h2 style="grid-column:1/-1;margin:0">Bulb brightness</h2>
@@ -227,6 +242,14 @@
       const device = Object.assign({}, devices[index] || defaultDevice());
       container.querySelectorAll("[data-field]").forEach(el => {
         const key = el.getAttribute("data-field");
+        if (key === "beforeSunsetMinutes") {
+          device.darkOffsetMinutes = -Math.max(0, Number(el.value));
+          return;
+        }
+        if (key === "afterSunriseMinutes") {
+          device.lightOffsetMinutes = -Math.max(0, Number(el.value));
+          return;
+        }
         if (el.type === "checkbox") device[key] = el.checked;
         else if (el.type === "number" || el.type === "range") device[key] = Number(el.value);
         else device[key] = el.value.trim();

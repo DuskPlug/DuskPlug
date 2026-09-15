@@ -10,12 +10,14 @@ MENU = [
     "Turn Off",
     "Smart Mode",
     "Schedule Mode",
+    "Timed Mode",
     "Off when locked or sleeping",
+    None,
     "Screen brightness",
+    None,
     "Settings...",
     "Check for updates...",
     None,
-    "Restart",
     "Exit",
 ]
 CHECKED = {"Smart Mode"}

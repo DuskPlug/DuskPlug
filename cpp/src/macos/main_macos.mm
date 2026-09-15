@@ -319,17 +319,16 @@ void StartAutomationTimers(DuskPlugAppDelegate* delegate) {
         }
     }
 
-    [self.menu addItem:[NSMenuItem separatorItem]];
     self.scheduleModeItem = [[NSMenuItem alloc] initWithTitle:@"Schedule Mode"
                                                        action:@selector(onToggleScheduleMode:)
                                                 keyEquivalent:@""];
     [self.menu addItem:self.scheduleModeItem];
-    [self.menu addItem:[NSMenuItem separatorItem]];
     self.lockOffItem = [[NSMenuItem alloc] initWithTitle:@"Off when locked or sleeping"
                                                   action:@selector(onToggleLockOff:)
                                            keyEquivalent:@""];
     self.lockOffItem.state = NSControlStateValueOn;
     [self.menu addItem:self.lockOffItem];
+    [self.menu addItem:[NSMenuItem separatorItem]];
     self.screenBrightnessItem = [[NSMenuItem alloc] initWithTitle:@"Adjust screen brightness"
                                                            action:@selector(onToggleScreenBrightness:)
                                                     keyEquivalent:@""];

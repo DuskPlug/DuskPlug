@@ -530,22 +530,22 @@ void RebuildMenu() {
         }
     }
 
-    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
     g_scheduleModeItem = gtk_check_menu_item_new_with_label("Schedule Mode");
     g_signal_connect(g_scheduleModeItem, "toggled", G_CALLBACK(OnToggleScheduleMode), nullptr);
     gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), g_scheduleModeItem);
     gtk_widget_show(g_scheduleModeItem);
-    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
     g_lockOffItem = gtk_check_menu_item_new_with_label("Off when locked or sleeping");
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_lockOffItem), TRUE);
     g_signal_connect(g_lockOffItem, "toggled", G_CALLBACK(OnToggleLockOff), nullptr);
     gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), g_lockOffItem);
     gtk_widget_show(g_lockOffItem);
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
     g_screenBrightnessItem = gtk_check_menu_item_new_with_label("Adjust screen brightness");
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_screenBrightnessItem), FALSE);
     g_signal_connect(g_screenBrightnessItem, "toggled", G_CALLBACK(OnToggleScreenBrightness), nullptr);
     gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), g_screenBrightnessItem);
     gtk_widget_show(g_screenBrightnessItem);
+    gtk_menu_shell_append(GTK_MENU_SHELL(g_menu), gtk_separator_menu_item_new());
     g_signal_connect(g_menu, "show", G_CALLBACK(OnMenuShow), nullptr);
     add("Settings...", G_CALLBACK(OnSettings));
     add("Refresh Status", G_CALLBACK(OnRefresh));

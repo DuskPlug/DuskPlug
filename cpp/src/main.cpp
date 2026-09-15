@@ -50,7 +50,6 @@ constexpr UINT ID_MENU_TITLE = 10000;
 constexpr UINT CMD_ON = 10001;
 constexpr UINT CMD_OFF = 10002;
 constexpr UINT CMD_EXIT = 10004;
-constexpr UINT CMD_RESTART = 10005;
 constexpr UINT CMD_SETTINGS = 10009;
 constexpr UINT CMD_LOCK_OFF = 10010;
 constexpr UINT CMD_CHECK_UPDATES = 10011;
@@ -584,6 +583,7 @@ void RebuildTrayMenu() {
         reinterpret_cast<UINT_PTR>(g_app.timedSubMenu),
         L"Timed Mode");
     AppendMenuW(g_app.menu, MF_STRING | MF_UNCHECKED, CMD_LOCK_OFF, L"Off when locked or sleeping");
+    AppendMenuW(g_app.menu, MF_SEPARATOR, 0, nullptr);
     g_app.brightnessSubMenu = CreatePopupMenu();
     AppendMenuW(
         g_app.brightnessSubMenu,
@@ -596,6 +596,7 @@ void RebuildTrayMenu() {
         MF_STRING | MF_POPUP,
         reinterpret_cast<UINT_PTR>(g_app.brightnessSubMenu),
         L"Screen brightness");
+    AppendMenuW(g_app.menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(g_app.menu, MF_STRING, CMD_SETTINGS, L"Settings...");
     AppendMenuW(g_app.menu, MF_STRING, CMD_CHECK_UPDATES, L"Check for updates...");
     {
@@ -603,7 +604,6 @@ void RebuildTrayMenu() {
         AppendMenuW(g_app.menu, MF_STRING | MF_GRAYED | MF_DISABLED, 0, versionLabel.c_str());
     }
     AppendMenuW(g_app.menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(g_app.menu, MF_STRING, CMD_RESTART, L"Restart");
     AppendMenuW(g_app.menu, MF_STRING, CMD_EXIT, L"Exit");
 
     if (g_app.menuTick) {
@@ -969,38 +969,6 @@ void ShowContextMenu() {
     PostMessageW(g_app.hwnd, WM_NULL, 0, 0);
 }
 
-void RestartApp(HWND hwnd) {
-    wchar_t exePath[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-
-    g_app.smart.SavePersistedState();
-
-    if (g_mutex) {
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
-    }
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi{};
-    if (CreateProcessW(
-            exePath,
-            nullptr,
-            nullptr,
-            nullptr,
-            FALSE,
-            0,
-            nullptr,
-            g_app.appDir.c_str(),
-            &si,
-            &pi)) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    }
-
-    DestroyWindow(hwnd);
-}
-
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     LRESULT brightnessResult = 0;
     if (HandleTrayBrightnessMessage(hwnd, msg, wParam, lParam, brightnessResult)) {
@@ -1175,9 +1143,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
         case CMD_CHECK_UPDATES:
             RunUpdateCheck(true);
-            break;
-        case CMD_RESTART:
-            RestartApp(hwnd);
             break;
         case CMD_EXIT:
             g_app.smart.SavePersistedState();

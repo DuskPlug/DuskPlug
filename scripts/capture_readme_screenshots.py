@@ -72,13 +72,15 @@ def render_context_menu() -> Image.Image:
         ("Smart Mode", True, ""),
         None,
         ("Schedule Mode", False, ""),
+        ("Timed Mode", False, "submenu"),
         ("Off when locked or sleeping", False, ""),
+        None,
         ("Screen brightness", False, "submenu"),
+        None,
         ("Settings...", False, ""),
         ("Check for updates...", False, ""),
         (f"v{VERSION}", False, "disabled"),
         None,
-        ("Restart", False, ""),
         ("Exit", False, ""),
     ]
 

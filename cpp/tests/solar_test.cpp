@@ -38,6 +38,23 @@ TEST(NightExposureNearZero) {
     EXPECT_TRUE(exposure < 0.01);
 }
 
+TEST(CardiffSunsetSeptemberWithBstOffset) {
+    constexpr double kCardiffLat = 51.4816;
+    constexpr double kCardiffLng = -3.1791;
+    SolarTimes times = ComputeSolarTimes(kCardiffLat, kCardiffLng, 2026, 9, 15);
+    times = ApplyLocalUtcOffset(times, 60);
+    EXPECT_TRUE(times.sunsetMinutes >= 19 * 60 + 12);
+    EXPECT_TRUE(times.sunsetMinutes <= 19 * 60 + 40);
+}
+
+TEST(CardiffSunsetJanuaryWithoutDstOffset) {
+    constexpr double kCardiffLat = 51.4816;
+    constexpr double kCardiffLng = -3.1791;
+    const SolarTimes times = ComputeSolarTimes(kCardiffLat, kCardiffLng, 2026, 1, 15);
+    EXPECT_TRUE(times.sunsetMinutes >= 16 * 60 + 20);
+    EXPECT_TRUE(times.sunsetMinutes <= 16 * 60 + 45);
+}
+
 void RunSolarTests() {
     std::printf("solar tests\n");
     RUN_TEST(ComputeSolarTimesReasonable);
@@ -45,4 +62,6 @@ void RunSolarTests() {
     RUN_TEST(EastWindowMorningExposureHigherThanMidday);
     RUN_TEST(WinterMiddayLowerExposureThanSummer);
     RUN_TEST(NightExposureNearZero);
+    RUN_TEST(CardiffSunsetSeptemberWithBstOffset);
+    RUN_TEST(CardiffSunsetJanuaryWithoutDstOffset);
 }
