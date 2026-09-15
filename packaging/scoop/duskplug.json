@@ -6,7 +6,7 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/DuskPlug/DuskPlug/releases/download/v1.0.2/DuskPlug-Windows.zip",
-            "hash": "sha256:298d73e89d0cb346278b6c57795d06d57938965c77185f851be2fd6772dd62a8"
+            "hash": "sha256:fd8ab0c6796208946e482a4cd70d10563ddbfabca2cf7435a3a12d57480a93e6"
         }
     },
     "bin": "DuskPlug.exe",

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DuskPlug — Tuya smart plug tray app for Windows (dusk/dawn automation)</title>
+  <meta name="description" content="Free open-source Windows tray app for Tuya and Smart Life smart plugs. Turn your desk lamp on at sunset and off at sunrise, or use fixed daily schedules. MSI, winget, and Scoop install.">
+  <meta name="keywords" content="Tuya, Smart Life, smart plug, Windows tray app, home automation, sunset sunrise, dusk dawn, desk lamp">
+  <link rel="canonical" href="https://duskplug.github.io/DuskPlug/">
+  <meta property="og:title" content="DuskPlug — Tuya smart plug tray app for Windows">
+  <meta property="og:description" content="Turn your Tuya smart plug on at dusk and off at dawn from the Windows system tray. Free, open source, MIT licensed.">
+  <meta property="og:url" content="https://duskplug.github.io/DuskPlug/">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://github.com/DuskPlug/DuskPlug/raw/master/docs/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- Replace content with verification token from Google Search Console -->
+  <meta name="google-site-verification" content="REPLACE_WITH_SEARCH_CONSOLE_TOKEN">
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --text: #e7ecf3;
+      --muted: #9aa8b8;
+      --accent: #f5a623;
+      --accent-hover: #ffc04d;
+      --border: #2a3544;
+      --code-bg: #121820;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-hover); }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    header { text-align: center; padding: 2rem 0 1rem; }
+    h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.75rem; line-height: 1.2; }
+    .tagline { font-size: 1.15rem; color: var(--muted); max-width: 42rem; margin: 0 auto 1.5rem; }
+    .badges { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 2rem; }
+    .badge {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .install-grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      margin: 2rem 0;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .card h2 { margin: 0 0 0.75rem; font-size: 1.1rem; }
+    .btn {
+      display: inline-block;
+      background: var(--accent);
+      color: #1a1200;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 0.65rem 1.1rem;
+      border-radius: 8px;
+      margin-top: 0.5rem;
+    }
+    .btn:hover { background: var(--accent-hover); color: #1a1200; }
+    .btn-secondary {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+    .btn-secondary:hover { background: rgba(245, 166, 35, 0.12); color: var(--accent-hover); }
+    pre, code {
+      font-family: Consolas, Monaco, monospace;
+      font-size: 0.9rem;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      overflow-x: auto;
+      margin: 0.5rem 0 0;
+    }
+    section { margin: 3rem 0; }
+    section h2 { font-size: 1.5rem; margin-bottom: 1rem; }
+    ul.features { padding-left: 1.25rem; }
+    ul.features li { margin-bottom: 0.5rem; }
+    .screenshots {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .screenshots img {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .screenshots figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 0.35rem; }
+    footer {
+      border-top: 1px solid var(--border);
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    .star-cta {
+      text-align: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 2rem 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>DuskPlug</h1>
+      <p class="tagline">
+        A free, open-source Windows tray app for Tuya and Smart Life smart plugs.
+        Turn your desk lamp on at sunset and off at sunrise — no Home Assistant required.
+      </p>
+      <div class="badges">
+        <span class="badge">Windows 10/11</span>
+        <span class="badge">Tuya / Smart Life</span>
+        <span class="badge">MIT License</span>
+        <span class="badge">v1.0.2</span>
+      </div>
+    </header>
+
+    <div class="install-grid">
+      <div class="card">
+        <h2>winget (recommended)</h2>
+        <pre>winget install DuskPlug.DuskPlug</pre>
+        <p style="color:var(--muted);font-size:0.9rem;margin:0.5rem 0 0;">Windows Package Manager — same MSI as the direct installer.</p>
+      </div>
+      <div class="card">
+        <h2>Scoop</h2>
+        <pre>scoop bucket add duskplug https://github.com/DuskPlug/scoop-bucket
+scoop install duskplug</pre>
+      </div>
+      <div class="card">
+        <h2>Direct download</h2>
+        <p style="margin:0;color:var(--muted);">MSI installer or portable ZIP from GitHub Releases.</p>
+        <a class="btn" href="https://github.com/DuskPlug/DuskPlug/releases/latest">Download latest release</a>
+      </div>
+    </div>
+
+    <div class="star-cta">
+      <p style="margin:0 0 1rem;">If DuskPlug helps you, a GitHub star helps others find it.</p>
+      <a class="btn btn-secondary" href="https://github.com/DuskPlug/DuskPlug">Star on GitHub</a>
+    </div>
+
+    <section>
+      <h2>Why DuskPlug?</h2>
+      <ul class="features">
+        <li><strong>Smart Mode</strong> — plug on at sunset, off at sunrise from your location</li>
+        <li><strong>Schedule Mode</strong> — fixed daily on/off times, including overnight windows</li>
+        <li><strong>Manual control</strong> — toggle from the system tray icon</li>
+        <li><strong>Multi-device</strong> — plugs and dimmable bulbs, each with its own mode</li>
+        <li><strong>Your Tuya project only</strong> — credentials stay on your PC</li>
+        <li><strong>Lock-off</strong> — optional turn-off when the PC is locked</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Screenshots</h2>
+      <div class="screenshots">
+        <figure>
+          <img src="https://github.com/DuskPlug/DuskPlug/raw/master/docs/screenshots/tray-in-taskbar.png" alt="DuskPlug icon in the Windows 11 system tray" width="640" height="360" loading="lazy">
+          <figcaption>System tray on Windows 11</figcaption>
+        </figure>
+        <figure>
+          <img src="https://github.com/DuskPlug/DuskPlug/raw/master/docs/screenshots/tray-menu.png" alt="DuskPlug tray context menu with Smart Mode enabled" width="640" height="360" loading="lazy">
+          <figcaption>Tray menu with Smart Mode</figcaption>
+        </figure>
+        <figure>
+          <img src="https://github.com/DuskPlug/DuskPlug/raw/master/docs/screenshots/settings-dialog.png" alt="DuskPlug Settings dialog" width="640" height="360" loading="lazy">
+          <figcaption>Settings dialog</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>Getting started</h2>
+      <p>
+        You need a free Tuya Developer Platform project linked to the same Smart Life or Tuya phone app that controls your plug.
+        The one-time setup takes about 10 minutes.
+      </p>
+      <a class="btn" href="getting-started.html">Setup guide</a>
+      <a class="btn btn-secondary" href="https://github.com/DuskPlug/DuskPlug/blob/master/docs/GETTING-STARTED.md" style="margin-left:0.5rem;">Full guide on GitHub</a>
+    </section>
+
+    <section>
+      <h2>Also available</h2>
+      <p>Linux and macOS builds are available on <a href="https://github.com/DuskPlug/DuskPlug/releases">GitHub Releases</a>. Windows is the primary platform for tray automation.</p>
+    </section>
+
+    <footer>
+      <p>
+        <a href="https://github.com/DuskPlug/DuskPlug">Source code</a> ·
+        <a href="https://github.com/DuskPlug/DuskPlug/blob/master/docs/PRIVACY.md">Privacy</a> ·
+        <a href="https://github.com/DuskPlug/DuskPlug/issues">Issues</a>
+      </p>
+      <p>MIT License · DuskPlug is not affiliated with Tuya Inc.</p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -41,19 +41,22 @@ I wrote a getting-started guide that matches the 2026 portal UI because I lost a
 - **Schedule Mode** — fixed daily times, including overnight windows
 - **Settings dialog** — no hand-editing JSON unless you want to
 - **MSI installer** — Program Files, Start menu, run at login
+- **winget and Scoop** — `winget install DuskPlug.DuskPlug`
 
 Everything is MIT licensed: https://github.com/DuskPlug/DuskPlug
 
 ## If you try it
 
-Start with the MSI from [Releases](https://github.com/DuskPlug/DuskPlug/releases). First run opens Settings. If Smart Mode says it needs location, allow desktop apps in Windows Location privacy settings, then click **Detect Location**.
+Start at https://duskplug.github.io/DuskPlug/ — winget is the quickest install on Windows 10/11. First run opens Settings. If Smart Mode says it needs location, allow desktop apps in Windows Location privacy settings, then click **Detect Location**.
 
 If the Tuya portal shows no devices after linking, double-check the data center — UK/EU accounts sometimes need Western Europe instead of Central Europe.
 
 ## What's next
 
-Code signing through SignPath Foundation is pending. Package manager listings (winget, Scoop) are in progress. If you have a Tuya plug and a Windows desktop, I would love to hear whether the setup guide is clear enough.
+Code signing through SignPath Foundation is pending. winget listing is in review; Scoop has an official project bucket. If you have a Tuya plug and a Windows desktop, I would love to hear whether the setup guide is clear enough.
 
 ---
 
 **Suggested tags:** `windows`, `iot`, `opensource`, `smart-home`, `tuya`
+
+**Link:** https://duskplug.github.io/DuskPlug/

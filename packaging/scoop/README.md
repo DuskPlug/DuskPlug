@@ -9,6 +9,17 @@ Manifest source for [Scoop Extras](https://github.com/ScoopInstaller/Extras).
 3. Update `version` and the 64-bit `url`/`hash` on each release.
 4. Open a PR with a short description and a link to the GitHub release. New Extras packages also need a [package-request issue](https://github.com/ScoopInstaller/Extras/issues) and usually ~100 GitHub stars.
 
+## Official bucket (no star gate)
+
+Until Extras accepts the package, users can install from the project bucket:
+
+```powershell
+scoop bucket add duskplug https://github.com/DuskPlug/scoop-bucket
+scoop install duskplug
+```
+
+Keep [`duskplug.json`](duskplug.json) in sync with [DuskPlug/scoop-bucket](https://github.com/DuskPlug/scoop-bucket) on each release.
+
 ## Local install (personal bucket)
 
 ```powershell

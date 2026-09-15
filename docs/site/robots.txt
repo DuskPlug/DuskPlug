@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://duskplug.github.io/DuskPlug/sitemap.xml

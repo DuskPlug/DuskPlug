@@ -3,9 +3,9 @@
 ## Before tagging
 
 1. Bump version: `powershell -File scripts\bump-version.ps1` (patch by default; `-Part minor` or `-Part major` when needed). This updates [`VERSION`](../VERSION), `cpp/src/version.h`, and `cpp/macos/Info.plist`.
-3. Bump matching versions in [`cpp/macos/Info.plist`](../cpp/macos/Info.plist) and packaging manifests (winget, Scoop). The MSI product version is taken from `VERSION` when you run `Build-Msi.cmd`.
-4. Run tests locally: `cpp\ci-check.cmd` (Windows; runs both Windows and CMake test paths). On Linux/macOS: build `duskplug_tests` with CMake and run it.
-5. Optional: build MSI locally with `Build-Msi.cmd`
+2. Bump matching versions in packaging manifests (winget, Scoop) and the landing page version badge in [`docs/site/index.html`](site/index.html). The MSI product version is taken from `VERSION` when you run `Build-Msi.cmd`.
+3. Run tests locally: `cpp\ci-check.cmd` (Windows; runs both Windows and CMake test paths). On Linux/macOS: build `duskplug_tests` with CMake and run it.
+4. Optional: build MSI locally with `Build-Msi.cmd`
 
 ## Publish
 
@@ -20,10 +20,17 @@
 
 ## After the release
 
-1. Update [`packaging/winget/`](../packaging/winget/) manifests with the new version, MSI SHA256, and release URL.
-2. Open a PR to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) (see [`packaging/winget/README.md`](../packaging/winget/README.md)).
-3. Optionally update the Scoop manifest in [`packaging/scoop/`](../packaging/scoop/).
-4. Write release notes on GitHub — highlight user-visible changes. Mention code signing when SignPath is active.
+1. **winget** — Update [`packaging/winget/`](../packaging/winget/) with new version, MSI SHA256, and release URL. Open a PR to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) (see [`packaging/winget/README.md`](../packaging/winget/README.md)).
+2. **Scoop bucket** — Update [`packaging/scoop/duskplug.json`](../packaging/scoop/duskplug.json) and push the same change to [DuskPlug/scoop-bucket](https://github.com/DuskPlug/scoop-bucket).
+3. **Scoop Extras** (optional, when ~100 GitHub stars) — Open a package-request issue and PR to [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras).
+4. **Landing page** — Update version string and download links in [`docs/site/index.html`](site/index.html). Push to `master`; the Pages workflow deploys automatically.
+5. **Release notes** — Write notes on GitHub. Include searchable phrases naturally (e.g. "Tuya Windows tray app", "dusk dawn smart plug"). Mention code signing when SignPath is active.
+
+## Discoverability
+
+- **Landing page:** https://duskplug.github.io/DuskPlug/
+- **Google Search Console:** follow [`docs/SEARCH-CONSOLE.md`](SEARCH-CONSOLE.md) after Pages deploys.
+- **Community posts:** use drafts in [`docs/ANNOUNCEMENTS.md`](ANNOUNCEMENTS.md) and schedule in [`docs/LAUNCH-SCHEDULE.md`](LAUNCH-SCHEDULE.md).
 
 ## SignPath (when approved)
 

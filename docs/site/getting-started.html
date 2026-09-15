@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Getting started with DuskPlug — Tuya setup guide</title>
+  <meta name="description" content="Step-by-step guide to install DuskPlug and connect your Tuya or Smart Life smart plug on Windows.">
+  <link rel="canonical" href="https://duskplug.github.io/DuskPlug/getting-started.html">
+  <meta name="google-site-verification" content="REPLACE_WITH_SEARCH_CONSOLE_TOKEN">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      max-width: 720px;
+      margin: 2rem auto;
+      padding: 0 1.25rem 3rem;
+      line-height: 1.6;
+      color: #e7ecf3;
+      background: #0f1419;
+    }
+    a { color: #f5a623; }
+    h1 { line-height: 1.2; }
+    .card {
+      background: #1a2332;
+      border: 1px solid #2a3544;
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+    }
+    ol { padding-left: 1.25rem; }
+    li { margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">← DuskPlug home</a></p>
+  <h1>Getting started with DuskPlug</h1>
+  <p>
+    DuskPlug controls Tuya-compatible smart plugs from the Windows system tray.
+    This page summarizes the setup; the full guide with screenshots is on GitHub.
+  </p>
+
+  <div class="card">
+    <h2>1. Install DuskPlug</h2>
+    <p>Recommended:</p>
+    <pre style="background:#121820;padding:1rem;border-radius:8px;overflow-x:auto;">winget install DuskPlug.DuskPlug</pre>
+    <p>Or download the MSI from <a href="https://github.com/DuskPlug/DuskPlug/releases">GitHub Releases</a>.</p>
+  </div>
+
+  <div class="card">
+    <h2>2. Create a Tuya cloud project</h2>
+    <ol>
+      <li>Sign up at <a href="https://iot.tuya.com">iot.tuya.com</a> (Tuya Developer Platform).</li>
+      <li>Create a <strong>Smart Home</strong> cloud project in the data center that matches your phone app region.</li>
+      <li>Authorize IoT Core and Smart Home Basic Service.</li>
+      <li>Copy <strong>Access ID</strong> and <strong>Access Secret</strong> from the project Overview.</li>
+      <li>Link your Smart Life / Tuya phone app account under <strong>Devices → Link Tuya App Account</strong>.</li>
+      <li>Copy the <strong>Device ID</strong> for each plug from All Devices.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>3. Configure DuskPlug</h2>
+    <p>First run opens Settings. Enter your credentials and Device ID, then choose Smart Mode or Schedule Mode.</p>
+    <p>For Smart Mode, allow Windows location access for desktop apps, then click <strong>Detect Location</strong>.</p>
+  </div>
+
+  <p>
+    <strong>Full walkthrough:</strong>
+    <a href="https://github.com/DuskPlug/DuskPlug/blob/master/docs/GETTING-STARTED.md">docs/GETTING-STARTED.md on GitHub</a>
+  </p>
+</body>
+</html>

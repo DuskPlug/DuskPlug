@@ -32,7 +32,20 @@ Free, open source, and MIT-licensed. You only need your own free Tuya cloud proj
 
 ## Download
 
-**Installer (recommended):** download **DuskPlug.msi** from [GitHub Releases](https://github.com/DuskPlug/DuskPlug/releases) and run it. That installs to Program Files, adds a Start menu shortcut, and starts DuskPlug when you log in. First run opens **Settings**.
+**winget (recommended on Windows 10/11):**
+
+```powershell
+winget install DuskPlug.DuskPlug
+```
+
+**Scoop:**
+
+```powershell
+scoop bucket add duskplug https://github.com/DuskPlug/scoop-bucket
+scoop install duskplug
+```
+
+**Installer (MSI):** download **DuskPlug.msi** from [GitHub Releases](https://github.com/DuskPlug/DuskPlug/releases) and run it. That installs to Program Files, adds a Start menu shortcut, and starts DuskPlug when you log in. First run opens **Settings**.
 
 **Portable ZIP:** download **DuskPlug-Windows.zip**, unzip it anywhere, and double-click **`Start-DuskPlug.cmd`**.
 
