@@ -18,8 +18,8 @@
         "mode": "smart",
         "scheduleOnTime": "18:00",
         "scheduleOffTime": "23:00",
-        "darkOffsetMinutes": 0,
-        "lightOffsetMinutes": 0,
+        "darkOffsetMinutes": -30,
+        "lightOffsetMinutes": -30,
         "nightBrightness": 20,
         "dayBrightness": 80,
         "useBrightness": true

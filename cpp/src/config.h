@@ -26,8 +26,8 @@ struct DeviceAutomation {
     DeviceAutomationMode mode = DeviceAutomationMode::Manual;
     std::string scheduleOnTime = "18:00";
     std::string scheduleOffTime = "23:00";
-    int darkOffsetMinutes = 0;
-    int lightOffsetMinutes = 0;
+    int darkOffsetMinutes = -30;
+    int lightOffsetMinutes = -30;
     int nightBrightness = 20;
     int dayBrightness = 80;
     bool useBrightness = true;
@@ -57,8 +57,8 @@ struct AppConfig {
     bool hasLongitude = false;
     double latitude = 0.0;
     double longitude = 0.0;
-    int darkOffsetMinutes = 0;
-    int lightOffsetMinutes = 0;
+    int darkOffsetMinutes = -30;
+    int lightOffsetMinutes = -30;
     int lockOffSeconds = 30;
     int screenBrightnessNight = 20;
     int screenBrightnessDay = 80;

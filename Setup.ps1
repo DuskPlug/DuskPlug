@@ -146,8 +146,8 @@ function New-SetupDeviceEntry {
             mode                = 'manual'
             scheduleOnTime      = '18:00'
             scheduleOffTime     = '23:00'
-            darkOffsetMinutes   = 0
-            lightOffsetMinutes  = 0
+            darkOffsetMinutes   = -30
+            lightOffsetMinutes  = -30
             nightBrightness     = 20
             dayBrightness       = 80
             useBrightness       = ($Discovered.Type -eq 'bulb')

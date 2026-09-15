@@ -146,7 +146,7 @@ In Settings, under **Location**:
 
 1. Click **Detect Location**, type latitude and longitude, or paste coordinates copied from Google Maps (for example `51.48096831196373, -3.209212141442959`).
 2. Windows may prompt for location access. Allow it, and in Windows **Settings → Privacy & security → Location** turn on location services and **Let desktop apps access your location**.
-3. Per device in Smart Mode, leave **Before sunset** / **After sunrise** at `0` for exactly sunset and sunrise, or set minutes to turn on early or stay on later.
+3. Per device in Smart Mode, **Before sunset** / **After sunrise** default to `30` minutes (on half an hour before sunset, off half an hour after sunrise). Set either to `0` for exactly sunset or sunrise.
 
 ### Automation (per device)
 

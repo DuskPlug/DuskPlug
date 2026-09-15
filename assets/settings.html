@@ -167,7 +167,7 @@
     function showToast(message, kind) { const t = $("toast"); t.textContent = message || ""; t.className = "toast" + (kind ? " " + kind : ""); }
 
     function defaultDevice() {
-      return { id: "", name: "My device", type: "plug", enabled: true, switchCode: "switch_1", brightnessCode: "", brightnessMin: 10, brightnessMax: 1000, mode: "manual", scheduleOnTime: "18:00", scheduleOffTime: "23:00", darkOffsetMinutes: 0, lightOffsetMinutes: 0, nightBrightness: 20, dayBrightness: 80, useBrightness: true };
+      return { id: "", name: "My device", type: "plug", enabled: true, switchCode: "switch_1", brightnessCode: "", brightnessMin: 10, brightnessMax: 1000, mode: "manual", scheduleOnTime: "18:00", scheduleOffTime: "23:00", darkOffsetMinutes: -30, lightOffsetMinutes: -30, nightBrightness: 20, dayBrightness: 80, useBrightness: true };
     }
 
     function beforeSunsetDisplay(device) {
