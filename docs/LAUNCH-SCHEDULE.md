@@ -10,9 +10,9 @@ Stagger posts over 2–3 weeks. Use the **landing page** as the primary link (be
 | 1 | Tue (US Eastern AM) | Show HN | [`ANNOUNCEMENTS.md`](ANNOUNCEMENTS.md) | Pending |
 | 1 | Thu | Dev.to / blog | [`BLOG-DRAFT.md`](BLOG-DRAFT.md) | Pending |
 | 1 | Fri | r/homeautomation | [`ANNOUNCEMENTS.md`](ANNOUNCEMENTS.md) | Pending |
-| 2 | Tue | awesome-home-automation PR | [`AWESOME-LISTS.md`](AWESOME-LISTS.md) | Pending |
+| 2 | Tue | awesome-home-automation PR | [`AWESOME-LISTS.md`](AWESOME-LISTS.md) | [PR #1](https://github.com/apehex/awesome-home-automation/pull/1) opened |
 | 2 | Thu | r/Tuya or dev forum | [`ANNOUNCEMENTS.md`](ANNOUNCEMENTS.md) | Pending |
-| 3 | Tue | awesome-windows PR | [`AWESOME-LISTS.md`](AWESOME-LISTS.md) | Pending |
+| 3 | Tue | awesome-windows PR | [`AWESOME-LISTS.md`](AWESOME-LISTS.md) | [PR #297](https://github.com/0PandaDEV/awesome-windows/pull/297) opened |
 
 ## Before each post
 
