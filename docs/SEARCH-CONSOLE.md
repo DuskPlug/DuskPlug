@@ -21,10 +21,8 @@ One-time steps to get the DuskPlug GitHub Pages site indexed by Google.
    ```html
    <meta name="google-site-verification" content="YOUR_TOKEN_HERE">
    ```
-2. Replace `REPLACE_WITH_SEARCH_CONSOLE_TOKEN` in both files with `YOUR_TOKEN_HERE`:
-   - [`docs/site/index.html`](site/index.html)
-   - [`docs/site/getting-started.html`](site/getting-started.html)
-3. Commit, push, and wait for the Pages workflow to finish.
+2. Verification meta tag is set in [`docs/site/index.html`](site/index.html) and [`docs/site/getting-started.html`](site/getting-started.html).
+3. After any change, push and wait for the Pages workflow to finish.
 4. Click **Verify** in Search Console.
 
 ## 3. Submit sitemap
