@@ -4,7 +4,6 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <comdef.h>
 #include <Wbemidl.h>
 #include <powrprof.h>
 
@@ -17,6 +16,17 @@
 #include <vector>
 
 namespace {
+
+struct WideBstr {
+    BSTR value = nullptr;
+    explicit WideBstr(const wchar_t* text) : value(SysAllocString(text)) {}
+    ~WideBstr() {
+        if (value) {
+            SysFreeString(value);
+        }
+    }
+    operator BSTR() const { return value; }
+};
 
 struct PhysicalMonitor {
     HANDLE handle = nullptr;
@@ -232,8 +242,8 @@ public:
 
         IEnumWbemClassObject* enumerator = nullptr;
         const HRESULT hr = services_->ExecQuery(
-            bstr_t("WQL"),
-            bstr_t("SELECT CurrentBrightness FROM WmiMonitorBrightness"),
+            WideBstr(L"WQL"),
+            WideBstr(L"SELECT CurrentBrightness FROM WmiMonitorBrightness"),
             WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
             nullptr,
             &enumerator);
@@ -274,8 +284,8 @@ public:
 
         IEnumWbemClassObject* enumerator = nullptr;
         const HRESULT hr = services_->ExecQuery(
-            bstr_t("WQL"),
-            bstr_t("SELECT CurrentBrightness FROM WmiMonitorBrightness"),
+            WideBstr(L"WQL"),
+            WideBstr(L"SELECT CurrentBrightness FROM WmiMonitorBrightness"),
             WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
             nullptr,
             &enumerator);
@@ -332,7 +342,7 @@ private:
 
         if (!services_) {
             if (FAILED(locator_->ConnectServer(
-                    bstr_t(L"ROOT\\WMI"),
+                    WideBstr(L"ROOT\\WMI"),
                     nullptr,
                     nullptr,
                     nullptr,
@@ -356,8 +366,8 @@ private:
 
         IEnumWbemClassObject* enumerator = nullptr;
         const HRESULT hr = services_->ExecQuery(
-            bstr_t("WQL"),
-            bstr_t("SELECT Active FROM WmiMonitorBrightnessMethods WHERE Active=TRUE"),
+            WideBstr(L"WQL"),
+            WideBstr(L"SELECT Active FROM WmiMonitorBrightnessMethods WHERE Active=TRUE"),
             WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
             nullptr,
             &enumerator);
@@ -388,7 +398,7 @@ private:
 
         IWbemClassObject* classObject = nullptr;
         if (FAILED(services_->GetObject(
-                bstr_t(L"WmiMonitorBrightnessMethods"),
+                WideBstr(L"WmiMonitorBrightnessMethods"),
                 0,
                 nullptr,
                 &classObject,
@@ -406,8 +416,8 @@ private:
 
         IEnumWbemClassObject* enumerator = nullptr;
         const HRESULT enumHr = services_->ExecQuery(
-            bstr_t("WQL"),
-            bstr_t("SELECT * FROM WmiMonitorBrightnessMethods WHERE Active=TRUE"),
+            WideBstr(L"WQL"),
+            WideBstr(L"SELECT * FROM WmiMonitorBrightnessMethods WHERE Active=TRUE"),
             WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
             nullptr,
             &enumerator);
@@ -440,7 +450,7 @@ private:
                 VARIANT path{};
                 VariantInit(&path);
                 if (SUCCEEDED(instance->Get(L"__PATH", 0, &path, nullptr, nullptr)) && path.vt == VT_BSTR) {
-                    if (SUCCEEDED(services_->ExecMethod(path.bstrVal, bstr_t(L"WmiSetBrightness"), 0, nullptr, params, nullptr, nullptr))) {
+                    if (SUCCEEDED(services_->ExecMethod(path.bstrVal, WideBstr(L"WmiSetBrightness"), 0, nullptr, params, nullptr, nullptr))) {
                         anySet = true;
                     }
                 }

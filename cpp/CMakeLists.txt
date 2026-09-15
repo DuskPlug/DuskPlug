@@ -50,7 +50,7 @@ if(WIN32)
         src/app.rc
     )
     target_sources(duskplug_core PRIVATE src/update_apply_win.cpp)
-    target_link_libraries(DuskPlug PRIVATE duskplug_core winhttp advapi32 shell32 comctl32 ole32 oleaut32 comsuppw uuid user32 gdi32 wtsapi32 wbemuuid PowrProf dxva2)
+    target_link_libraries(DuskPlug PRIVATE duskplug_core winhttp advapi32 shell32 comctl32 ole32 oleaut32 uuid user32 gdi32 wtsapi32 wbemuuid PowrProf dxva2)
     set_target_properties(DuskPlug PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
     )

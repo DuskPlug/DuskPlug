@@ -103,7 +103,7 @@ $linkFlags = @(
 if (-not $Release) { $linkFlags += '-g' }
 
 $libs = @(
-    '-lwinhttp', '-ladvapi32', '-lshell32', '-lcomctl32', '-lole32', '-loleaut32', '-lcomsuppw', '-luuid',
+    '-lwinhttp', '-ladvapi32', '-lshell32', '-lcomctl32', '-lole32', '-loleaut32', '-luuid',
     '-luser32', '-lgdi32', '-lwtsapi32', '-lruntimeobject', '-lwindowsapp', '-ldwmapi',
     '-lwbemuuid', '-lPowrProf', '-ldxva2'
 )

@@ -81,3 +81,19 @@ public:
 ILocationService* CreateLinuxLocationService() {
     return new LinuxLocationService();
 }
+
+bool RequestLinuxLocation(double& latitude, double& longitude, std::string& error) {
+    GeoLocation location;
+    if (!TryGeoclue(location, error)) {
+        return false;
+    }
+    latitude = location.latitude;
+    longitude = location.longitude;
+    return true;
+}
+
+void OpenLinuxLocationSettings() {
+    g_spawn_command_line_async(
+        "xdg-open 'gnome-control-center location' 2>/dev/null || xdg-open 'https://wiki.gnome.org/Projects/GeoClue'",
+        nullptr);
+}
