@@ -197,16 +197,18 @@ bool SmartModeController::IsScreenBrightnessAvailable() const {
 }
 
 int SmartModeController::GetScreenBrightnessPercent() const {
-    if (brightness_) {
-        const int current = brightness_->GetCurrentPercent();
-        if (current >= 0) {
-            return current;
-        }
-    }
-    if (hasAppliedBrightness_ && lastAppliedBrightnessPercent_ >= 0) {
-        return lastAppliedBrightnessPercent_;
-    }
-    return ComputeScreenBrightnessTarget();
+    const int lastApplied = (hasAppliedBrightness_ && lastAppliedBrightnessPercent_ >= 0)
+        ? lastAppliedBrightnessPercent_
+        : -1;
+    const int hardware = brightness_ ? brightness_->GetCurrentPercent() : -1;
+    const int automaticTarget = (lastApplied < 0 && hardware < 0 && screenBrightnessEnabled_)
+        ? ComputeScreenBrightnessTarget()
+        : 50;
+    return ResolveDisplayedScreenBrightnessPercent(
+        lastApplied,
+        hardware,
+        screenBrightnessEnabled_,
+        automaticTarget);
 }
 
 void SmartModeController::SetScreenBrightnessPercent(int percent) {
@@ -477,12 +479,19 @@ int SmartModeController::ComputeScreenBrightnessTarget() const {
     return ShouldUseNightBrightness() ? config_.screenBrightnessNight : config_.screenBrightnessDay;
 }
 
+void SmartModeController::NotifyScreenBrightnessChanged() {
+    if (callbacks_.onScreenBrightnessChanged) {
+        callbacks_.onScreenBrightnessChanged();
+    }
+}
+
 void SmartModeController::ReleaseBrightness() {
     if (brightnessCaptured_ && brightness_) {
         brightness_->Restore();
         brightnessCaptured_ = false;
         hasAppliedBrightness_ = false;
         lastAppliedBrightnessPercent_ = -1;
+        NotifyScreenBrightnessChanged();
     }
 }
 
@@ -516,6 +525,7 @@ void SmartModeController::ApplyBrightness() {
     if (brightness_->SetPercent(target)) {
         hasAppliedBrightness_ = true;
         lastAppliedBrightnessPercent_ = target;
+        NotifyScreenBrightnessChanged();
         return;
     }
 

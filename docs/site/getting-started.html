@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Getting started with DuskPlug — Tuya setup guide</title>
-  <meta name="description" content="Step-by-step guide to install DuskPlug and connect your Tuya or Smart Life smart plug on Windows.">
+  <meta name="description" content="Step-by-step guide to install DuskPlug on Windows, Linux, or macOS and connect your Tuya or Smart Life smart plug.">
   <link rel="canonical" href="https://duskplug.github.io/DuskPlug/getting-started.html">
   <meta name="google-site-verification" content="qvgyw_n0HUPwOAAEUYqq7Otp-z3nwoQT_kDySw5sbvY">
   <style>
@@ -34,15 +34,17 @@
   <p><a href="index.html">← DuskPlug home</a></p>
   <h1>Getting started with DuskPlug</h1>
   <p>
-    DuskPlug controls Tuya-compatible smart plugs from the Windows system tray.
+    DuskPlug controls Tuya-compatible smart plugs from the system tray (Windows and Linux) or menu bar (macOS).
     This page summarizes the setup; the full guide with screenshots is on GitHub.
   </p>
 
   <div class="card">
     <h2>1. Install DuskPlug</h2>
-    <p>Recommended:</p>
+    <p><strong>Windows (recommended):</strong></p>
     <pre style="background:#121820;padding:1rem;border-radius:8px;overflow-x:auto;">winget install DuskPlug.DuskPlug</pre>
-    <p>Or download the MSI from <a href="https://github.com/DuskPlug/DuskPlug/releases">GitHub Releases</a>.</p>
+    <p>Or download the MSI or portable ZIP from <a href="https://github.com/DuskPlug/DuskPlug/releases">GitHub Releases</a>.</p>
+    <p><strong>Linux:</strong> download <strong>DuskPlug-Linux-x64.tar.gz</strong>, extract it, and run <code>./duskplug</code>.</p>
+    <p><strong>macOS:</strong> download <strong>DuskPlug-macOS.zip</strong>, unzip <strong>DuskPlug.app</strong>, and open it (right-click → Open the first time if macOS blocks an unsigned build).</p>
   </div>
 
   <div class="card">
@@ -60,7 +62,7 @@
   <div class="card">
     <h2>3. Configure DuskPlug</h2>
     <p>First run opens Settings. Enter your credentials and Device ID, then choose Smart Mode or Schedule Mode.</p>
-    <p>For Smart Mode, allow Windows location access for desktop apps, then click <strong>Detect Location</strong>.</p>
+    <p>For Smart Mode, allow location access when prompted (on Windows, enable desktop apps in Location privacy settings), then click <strong>Detect Location</strong>.</p>
   </div>
 
   <p>

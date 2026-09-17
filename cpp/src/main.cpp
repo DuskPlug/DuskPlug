@@ -1429,6 +1429,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             UpdateContextMenuChecks();
             ShowSetupBalloon(L"Timed mode finished — devices turned off.");
         };
+        callbacks.onScreenBrightnessChanged = []() {
+            SyncBrightnessPanelAutoState();
+        };
         g_app.smart.Initialize(
             g_app.config,
             g_app.client.get(),

@@ -38,6 +38,7 @@ $sources = @(
     (Join-Path $Tests 'update_checker_test.cpp'),
     (Join-Path $Tests 'settings_page_test.cpp'),
     (Join-Path $Tests 'tray_menu_test.cpp'),
+    (Join-Path $Tests 'brightness_display_test.cpp'),
     (Join-Path $Src 'schedule.cpp'),
     (Join-Path $Src 'json_util.cpp'),
     (Join-Path $Src 'crypto.cpp'),

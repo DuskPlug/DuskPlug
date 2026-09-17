@@ -10,6 +10,7 @@ void RunSemverTests();
 void RunUpdateCheckerTests();
 void RunSettingsPageTests();
 void RunTrayMenuTests();
+void RunBrightnessDisplayTests();
 
 int main() {
     RunScheduleTests();
@@ -22,6 +23,7 @@ int main() {
     RunUpdateCheckerTests();
     RunSettingsPageTests();
     RunTrayMenuTests();
+    RunBrightnessDisplayTests();
 
     if (g_testFailures == 0) {
         std::printf("\nAll tests passed.\n");

@@ -15,6 +15,7 @@ struct SmartModeCallbacks {
     std::function<void(const std::string& text)> showSetupMessage;
     std::function<bool()> isBusy;
     std::function<void()> onTimedModeExpired;
+    std::function<void()> onScreenBrightnessChanged;
 };
 
 struct DeviceRuntimeState {
@@ -98,6 +99,7 @@ private:
     void ApplyDesiredState(const DeviceConfig& device, const DesiredDeviceState& desired);
     void ApplyBrightness();
     void ReleaseBrightness();
+    void NotifyScreenBrightnessChanged();
     bool StartActivityTracking(std::string& error);
     void UpdateTrayFromRuntimeState();
     DeviceRuntimeState& RuntimeFor(const std::string& deviceId);

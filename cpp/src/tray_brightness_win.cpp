@@ -163,7 +163,7 @@ void ToggleAutomaticFromPanel() {
     if (g_callbacks.setAutoEnabled) {
         g_callbacks.setAutoEnabled(!enabled);
     }
-    SyncAutoCheckboxState();
+    SyncBrightnessPanelAutoState();
 }
 
 void DisableAutomaticIfEnabled() {
@@ -452,7 +452,7 @@ LRESULT CALLBACK BrightnessPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             if (g_callbacks.setAutoEnabled) {
                 g_callbacks.setAutoEnabled(checked);
             }
-            SyncAutoCheckboxState();
+            SyncBrightnessPanelAutoState();
             return 0;
         }
         break;
@@ -495,8 +495,10 @@ LRESULT CALLBACK BrightnessPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return 0;
 
     case WM_BRIGHTNESS_SYNC: {
-        const int percent = g_callbacks.getPercent ? g_callbacks.getPercent() : 50;
+        const int percent = g_callbacks.getPercent ? ClampPercent(g_callbacks.getPercent()) : 50;
         ApplyTrackPercent(percent, false);
+        g_lastAppliedPercent = percent;
+        g_pendingApplyPercent = -1;
         SyncAutoCheckboxState();
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
@@ -759,9 +761,10 @@ void DrawBrightnessPlaceholderItem(const DRAWITEMSTRUCT* draw) {
 }
 
 void SyncBrightnessPanelAutoState() {
-    if (g_popup && IsWindowVisible(g_popup)) {
-        SyncAutoCheckboxState();
+    if (!g_popup || !IsWindowVisible(g_popup) || g_dragging) {
+        return;
     }
+    SendMessageW(g_popup, WM_BRIGHTNESS_SYNC, 0, 0);
 }
 
 bool HandleTrayBrightnessMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& result) {

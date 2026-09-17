@@ -124,6 +124,7 @@ add_executable(duskplug_tests
     tests/update_checker_test.cpp
     tests/settings_page_test.cpp
     tests/tray_menu_test.cpp
+    tests/brightness_display_test.cpp
     src/settings_page.cpp
     src/tray_menu.cpp
 )
