@@ -591,6 +591,9 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error, boo
     if (auto windowAzimuth = JsonGetNumber(json, "WindowAzimuthDegrees")) {
         out.windowAzimuthDegrees = static_cast<int>(*windowAzimuth);
     }
+    if (out.windowAzimuthDegrees >= 0) {
+        out.screenBrightnessAdaptive = true;
+    }
     if (auto glareWeight = JsonGetNumber(json, "WindowGlareWeight")) {
         out.windowGlareWeight = std::clamp(*glareWeight, 0.0, 1.0);
     }

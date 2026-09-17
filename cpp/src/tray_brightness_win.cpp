@@ -33,7 +33,6 @@ HHOOK g_llMouseHook = nullptr;
 HHOOK g_menuFilterHook = nullptr;
 
 HCURSOR g_handCursor = nullptr;
-HCURSOR g_arrowCursor = nullptr;
 
 bool g_classRegistered = false;
 bool g_updatingTrack = false;
@@ -57,6 +56,9 @@ void UninstallInputHooks();
 void ScheduleBrightnessApply(int percent);
 void FlushBrightnessApply();
 void SyncAutoCheckboxState();
+void ApplyTrackPercent(int percent, bool scheduleApply);
+void SyncPanelTrackFromSystem();
+int InitialPanelPercent();
 void PaintAutoRowSeparator(HDC dc, const RECT& clientRect);
 void ToggleAutomaticFromPanel();
 
@@ -156,6 +158,36 @@ void SyncAutoCheckboxState() {
     const bool enabled = g_callbacks.isAutoEnabled && g_callbacks.isAutoEnabled();
     SendMessageW(check, BM_SETCHECK, enabled ? BST_CHECKED : BST_UNCHECKED, 0);
     RedrawWindow(check, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE);
+}
+
+int InitialPanelPercent() {
+    if (g_callbacks.isAutoEnabled && g_callbacks.isAutoEnabled() && g_callbacks.getPercent) {
+        return ClampPercent(g_callbacks.getPercent());
+    }
+
+    if (g_callbacks.getHardwarePercent) {
+        const int hardware = g_callbacks.getHardwarePercent();
+        if (hardware >= 0) {
+            return ClampPercent(hardware);
+        }
+    }
+
+    if (g_callbacks.getPercent) {
+        return ClampPercent(g_callbacks.getPercent());
+    }
+
+    return 50;
+}
+
+void SyncPanelTrackFromSystem() {
+    if (!g_popup || g_dragging) {
+        return;
+    }
+
+    const int percent = g_callbacks.getPercent ? ClampPercent(g_callbacks.getPercent()) : 50;
+    ApplyTrackPercent(percent, false);
+    g_lastAppliedPercent = percent;
+    g_pendingApplyPercent = -1;
 }
 
 void ToggleAutomaticFromPanel() {
@@ -268,22 +300,6 @@ void PaintAutoRowSeparator(HDC dc, const RECT& clientRect) {
     DeleteObject(separator);
 }
 
-void UpdateHoverCursor(POINT screenPt) {
-    RECT trackRect{};
-    if (TrackScreenRect(trackRect) && PtInRect(&trackRect, screenPt) != FALSE) {
-        SetCursor(g_handCursor ? g_handCursor : LoadCursorW(nullptr, IDC_HAND));
-        return;
-    }
-
-    RECT autoRowRect{};
-    if (AutoRowScreenRect(autoRowRect) && PtInRect(&autoRowRect, screenPt) != FALSE) {
-        SetCursor(g_arrowCursor ? g_arrowCursor : LoadCursorW(nullptr, IDC_ARROW));
-        return;
-    }
-
-    SetCursor(g_arrowCursor ? g_arrowCursor : LoadCursorW(nullptr, IDC_ARROW));
-}
-
 enum class MouseHandleResult {
     NotHandled,
     HandledPassThrough,
@@ -300,10 +316,6 @@ MouseHandleResult HandlePanelMouse(UINT message, POINT screenPt) {
 
     RECT autoRowRect{};
     const bool inAutoRow = AutoRowScreenRect(autoRowRect) && PtInRect(&autoRowRect, screenPt) != FALSE;
-
-    if (message == WM_MOUSEMOVE) {
-        UpdateHoverCursor(screenPt);
-    }
 
     if ((message == WM_LBUTTONDOWN || message == WM_LBUTTONUP) && inAutoRow) {
         if (message == WM_LBUTTONUP) {
@@ -339,11 +351,21 @@ MouseHandleResult HandlePanelMouse(UINT message, POINT screenPt) {
 }
 
 LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code >= 0 && g_popupVisible) {
-        const MSLLHOOKSTRUCT* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
-        const POINT screenPt = info->pt;
+    if (code < 0 || !g_popupVisible) {
+        return CallNextHookEx(g_llMouseHook, code, wParam, lParam);
+    }
 
-        switch (wParam) {
+    const MSLLHOOKSTRUCT* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+    const POINT screenPt = info->pt;
+
+    if (!g_dragging) {
+        RECT popupRect{};
+        if (!PopupScreenRect(popupRect) || PtInRect(&popupRect, screenPt) == FALSE) {
+            return CallNextHookEx(g_llMouseHook, code, wParam, lParam);
+        }
+    }
+
+    switch (wParam) {
         case WM_LBUTTONDOWN:
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP: {
@@ -362,7 +384,6 @@ LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam) {
         }
         default:
             break;
-        }
     }
 
     return CallNextHookEx(g_llMouseHook, code, wParam, lParam);
@@ -376,14 +397,13 @@ LRESULT CALLBACK BrightnessMenuFilterProc(int code, WPARAM wParam, LPARAM lParam
             case WM_LBUTTONDOWN:
             case WM_MOUSEMOVE:
             case WM_LBUTTONUP: {
-                POINT screenPt = msg->pt;
-                if ((screenPt.x | screenPt.y) == 0) {
-                    const DWORD pos = GetMessagePos();
-                    screenPt.x = GET_X_LPARAM(pos);
-                    screenPt.y = GET_Y_LPARAM(pos);
-                }
+                const DWORD pos = GetMessagePos();
+                POINT screenPt{
+                    GET_X_LPARAM(pos),
+                    GET_Y_LPARAM(pos),
+                };
                 const MouseHandleResult handled = HandlePanelMouse(msg->message, screenPt);
-                if (handled != MouseHandleResult::NotHandled) {
+                if (handled == MouseHandleResult::HandledBlock) {
                     return 1;
                 }
                 break;
@@ -495,11 +515,10 @@ LRESULT CALLBACK BrightnessPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         return 0;
 
     case WM_BRIGHTNESS_SYNC: {
-        const int percent = g_callbacks.getPercent ? ClampPercent(g_callbacks.getPercent()) : 50;
-        ApplyTrackPercent(percent, false);
-        g_lastAppliedPercent = percent;
-        g_pendingApplyPercent = -1;
         SyncAutoCheckboxState();
+        if (g_callbacks.isAutoEnabled && g_callbacks.isAutoEnabled()) {
+            SyncPanelTrackFromSystem();
+        }
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -621,7 +640,6 @@ void InitTrayBrightnessUi(HWND owner, const TrayBrightnessCallbacks& callbacks) 
     g_owner = owner;
     g_callbacks = callbacks;
     g_handCursor = LoadCursorW(nullptr, IDC_HAND);
-    g_arrowCursor = LoadCursorW(nullptr, IDC_ARROW);
 
     INITCOMMONCONTROLSEX icc{};
     icc.dwSize = sizeof(icc);
@@ -639,13 +657,11 @@ void ShutdownTrayBrightnessUi() {
     g_owner = nullptr;
     g_callbacks = {};
     g_handCursor = nullptr;
-    g_arrowCursor = nullptr;
 }
 
 void OnTrayContextMenuOpening() {
     g_dragging = false;
     g_popupVisible = false;
-    InstallInputHooks();
 }
 
 void ShowBrightnessPanelAtRect(const RECT& itemRect) {
@@ -684,9 +700,11 @@ void ShowBrightnessPanelAtRect(const RECT& itemRect) {
     }
 
     if (firstShow) {
-        SendMessageW(g_popup, WM_BRIGHTNESS_SYNC, 0, 0);
+        const int percent = InitialPanelPercent();
+        ApplyTrackPercent(percent, false);
+        g_lastAppliedPercent = percent;
         g_pendingApplyPercent = -1;
-        g_lastAppliedPercent = g_callbacks.getPercent ? ClampPercent(g_callbacks.getPercent()) : 50;
+        SyncAutoCheckboxState();
     }
 
     SetWindowPos(
@@ -701,7 +719,9 @@ void ShowBrightnessPanelAtRect(const RECT& itemRect) {
 
     g_lastPanelScreenRect = itemRect;
     g_popupVisible = true;
-    g_dragging = false;
+    if (firstShow) {
+        g_dragging = false;
+    }
     InstallInputHooks();
 }
 
@@ -733,6 +753,7 @@ void HideBrightnessPanel() {
     g_lastPanelScreenRect = {};
     g_brightnessSubMenu = nullptr;
     g_pendingSubMenu = nullptr;
+    UninstallInputHooks();
     if (g_popup) {
         ShowWindow(g_popup, SW_HIDE);
     }

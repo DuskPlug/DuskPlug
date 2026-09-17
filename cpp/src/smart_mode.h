@@ -16,6 +16,8 @@ struct SmartModeCallbacks {
     std::function<bool()> isBusy;
     std::function<void()> onTimedModeExpired;
     std::function<void()> onScreenBrightnessChanged;
+    std::function<void()> onBrightnessFadeStarted;
+    std::function<void()> onBrightnessFadeFinished;
 };
 
 struct DeviceRuntimeState {
@@ -70,6 +72,8 @@ public:
     bool IsScreenBrightnessAvailable() const;
     int GetScreenBrightnessPercent() const;
     void SetScreenBrightnessPercent(int percent);
+    void OnBrightnessFadeTick();
+    bool IsBrightnessFadeActive() const { return brightnessFadeActive_; }
 
     bool SetDeviceSwitch(const DeviceConfig& device, bool on, std::string& error);
     bool ToggleDevice(const DeviceConfig& device, std::string& error, bool& newState);
@@ -98,8 +102,14 @@ private:
     DesiredDeviceState ComputeDesiredState(const DeviceConfig& device) const;
     void ApplyDesiredState(const DeviceConfig& device, const DesiredDeviceState& desired);
     void ApplyBrightness();
+    void ApplyBrightnessImmediate(int percent, bool notifyUi = true);
+    void BeginBrightnessTransition(int target);
+    void StopBrightnessFade();
     void ReleaseBrightness();
     void NotifyScreenBrightnessChanged();
+    int CurrentAppliedBrightnessPercent() const;
+    int ReadHardwareBrightnessPercent() const;
+    void EnsureLocationForBrightness();
     bool StartActivityTracking(std::string& error);
     void UpdateTrayFromRuntimeState();
     DeviceRuntimeState& RuntimeFor(const std::string& deviceId);
@@ -122,6 +132,11 @@ private:
     bool brightnessCaptured_ = false;
     bool hasAppliedBrightness_ = false;
     int lastAppliedBrightnessPercent_ = -1;
+    bool brightnessFadeActive_ = false;
+    int brightnessFadeFrom_ = 0;
+    int brightnessFadeTo_ = 0;
+    uint64_t brightnessFadeStartMs_ = 0;
+    uint64_t brightnessFadeDurationMs_ = 0;
     bool brightnessUnavailableNotified_ = false;
     bool activityStarted_ = false;
     uint64_t timedExpiresAtMs_ = 0;

@@ -17,7 +17,13 @@ if ($elevated.ExitCode -ne 0) {
     throw "Install failed (exit $($elevated.ExitCode)). $detail"
 }
 
-$log = Join-Path (Split-Path $PSScriptRoot -Parent) 'install-last.log'
+$root = Split-Path $PSScriptRoot -Parent
+$log = Join-Path $root 'install-last.log'
 if (Test-Path -LiteralPath $log) {
     Get-Content -LiteralPath $log
+}
+
+$installExe = Join-Path 'C:\Program Files\DuskPlug' 'DuskPlug.exe'
+if ((Test-Path -LiteralPath $installExe) -and -not (Get-Process DuskPlug -ErrorAction SilentlyContinue)) {
+    Start-Process -FilePath $installExe
 }

@@ -35,6 +35,7 @@ struct AppState {
     guint pollTimer = 0;
     guint smartTimer = 0;
     guint lockTimer = 0;
+    guint brightnessFadeTimer = 0;
     InstallKind installKind = InstallKind::LinuxTarball;
     UpdateInfo pendingUpdate;
 };
@@ -166,6 +167,28 @@ gboolean OnLockTimer(gpointer) {
         g_app.smart.OnPowerSuspend();
     }
     return G_SOURCE_CONTINUE;
+}
+
+gboolean OnBrightnessFadeTimer(gpointer) {
+    g_app.smart.OnBrightnessFadeTick();
+    if (!g_app.smart.IsBrightnessFadeActive()) {
+        g_app.brightnessFadeTimer = 0;
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+void StartBrightnessFadeTimer() {
+    if (!g_app.brightnessFadeTimer) {
+        g_app.brightnessFadeTimer = g_timeout_add(33, OnBrightnessFadeTimer, nullptr);
+    }
+}
+
+void StopBrightnessFadeTimer() {
+    if (g_app.brightnessFadeTimer) {
+        g_source_remove(g_app.brightnessFadeTimer);
+        g_app.brightnessFadeTimer = 0;
+    }
 }
 
 void StartAutomationTimers() {
@@ -598,6 +621,8 @@ int main(int argc, char** argv) {
         };
         callbacks.showSetupMessage = ShowMessage;
         callbacks.isBusy = []() { return g_app.busy.load(); };
+        callbacks.onBrightnessFadeStarted = StartBrightnessFadeTimer;
+        callbacks.onBrightnessFadeFinished = StopBrightnessFadeTimer;
         g_app.smart.Initialize(
             g_app.config,
             g_app.client.get(),

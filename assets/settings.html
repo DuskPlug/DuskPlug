@@ -31,6 +31,7 @@
     .card { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 14px; }
     .card h2 { margin: 0 0 4px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
     .hint { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+    .hint code { font-family: Consolas, Monaco, monospace; font-size: 12px; color: var(--text); background: rgba(255,255,255,0.06); padding: 0.1em 0.35em; border-radius: 4px; }
     .grid { display: grid; gap: 12px; }
     .cols-2 { grid-template-columns: 1fr 1fr; }
     .cols-3 { grid-template-columns: 1fr 1fr auto; }
@@ -38,6 +39,8 @@
     input, select { height: 36px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input); color: var(--text); padding: 0 11px; font: inherit; font-size: 13.5px; }
     input:focus, select:focus { border-color: rgba(231, 163, 90, 0.7); box-shadow: 0 0 0 3px var(--accent-dim); outline: none; }
     input[type="range"] { height: 22px; padding: 0; background: transparent; border: 0; accent-color: var(--accent); }
+    input[type="checkbox"] { width: 16px; height: 16px; min-width: 16px; margin: 2px 0 0; padding: 0; accent-color: var(--accent); flex-shrink: 0; }
+    label.check-row { flex-direction: row; align-items: flex-start; gap: 10px; color: var(--text); font-weight: 500; line-height: 1.45; }
     .secret-wrap { position: relative; }
     .secret-wrap input { padding-right: 72px; width: 100%; }
     .toggle-secret { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--accent-2); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
@@ -62,6 +65,9 @@
     .actions { display: flex; gap: 8px; }
     .linkish { border: 0; background: none; color: var(--accent-2); font: inherit; font-size: 12.5px; cursor: pointer; padding: 0; display: none; }
     .linkish.show { display: inline; }
+    .subsection { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--card-border); }
+    .subsection:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
+    .subsection h3 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-2); }
   </style>
 </head>
 <body>
@@ -119,32 +125,43 @@
 
     <section class="card">
       <h2>Screen brightness</h2>
-      <p class="hint">Local monitor backlight. Enable from the tray menu.</p>
-      <label>Night (%)
-        <div class="bright-row"><input id="brightnessNight" type="range" min="0" max="100"><output id="brightnessNightOut">20</output></div>
-      </label>
-      <label style="margin-top:10px">Day (%)
-        <div class="bright-row"><input id="brightnessDay" type="range" min="0" max="100"><output id="brightnessDayOut">80</output></div>
-      </label>
-      <label style="margin-top:10px">Window faces
-        <select id="windowFacing">
-          <option value="-1">Not set</option>
-          <option value="0">North</option>
-          <option value="45">North-east</option>
-          <option value="90">East</option>
-          <option value="135">South-east</option>
-          <option value="180">South</option>
-          <option value="225">South-west</option>
-          <option value="270">West</option>
-          <option value="315">North-west</option>
-        </select>
-      </label>
-      <label class="check-row" style="margin-top:10px">
-        <input id="screenBrightnessAdaptive" type="checkbox">
-        Adjust through the day based on window direction and season
-      </label>
-      <p class="hint">East-facing: brighter in the morning when the sun hits your window; less boost when the sun is behind the house.</p>
-      <label style="margin-top:10px">Lock-off seconds<input id="lockOff" type="number" min="0"></label>
+      <p class="hint">These settings control your local monitor backlight. They do nothing until you turn on <strong>Screen brightness → Automatic</strong> from the tray menu (right-click the DuskPlug icon).</p>
+
+      <div class="subsection">
+        <h3>Night and day levels</h3>
+        <p class="hint">When <strong>Automatic</strong> is on from the tray menu, DuskPlug adjusts brightness between these levels using your home location above. Without a window direction below, it switches at sunset and sunrise. If a device uses Schedule mode, the night level applies during scheduled “on” hours instead.</p>
+        <label>At night (%)
+          <div class="bright-row"><input id="brightnessNight" type="range" min="0" max="100"><output id="brightnessNightOut">20</output></div>
+        </label>
+        <label style="margin-top:10px">During the day (%)
+          <div class="bright-row"><input id="brightnessDay" type="range" min="0" max="100"><output id="brightnessDayOut">80</output></div>
+        </label>
+      </div>
+
+      <div class="subsection">
+        <h3>Window direction</h3>
+        <p class="hint">Optional. When set, Automatic blends smoothly between night and day based on where the sun is relative to your main window through the day and season. Leave as “Not set” for a simple sunset/sunrise switch instead.</p>
+        <label style="margin-top:10px">Main window faces
+          <select id="windowFacing">
+            <option value="-1">Not set (sunset / sunrise only)</option>
+            <option value="0">North</option>
+            <option value="45">North-east</option>
+            <option value="90">East</option>
+            <option value="135">South-east</option>
+            <option value="180">South</option>
+            <option value="225">South-west</option>
+            <option value="270">West</option>
+            <option value="315">North-west</option>
+          </select>
+        </label>
+        <p class="hint">Example: an east-facing window is brighter in the morning when sun hits the glass, and closer to the night level when the sun is behind the house.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Lock-off</h2>
+      <p class="hint">When any device is in Smart or Schedule mode, turn it off after the computer is locked or sleeping.</p>
+      <label>Delay (seconds)<input id="lockOff" type="number" min="0"></label>
     </section>
   </main>
 
@@ -218,12 +235,14 @@
             <div class="bright-row"><input data-field="dayBrightness" type="range" min="0" max="100" value="${device.dayBrightness || 80}"><output>${device.dayBrightness || 80}</output></div>
           </label>
         </div>
-        <label class="bulb-only ${isBulb ? "" : "hidden"}" style="margin-top:10px"><input data-field="useBrightness" type="checkbox" ${device.useBrightness ? "checked" : ""}> Dim bulb (not just on/off)</label>
-        <details style="margin-top:12px"><summary style="cursor:pointer;color:var(--muted)">Advanced DP codes</summary>
+        <label class="check-row bulb-only ${isBulb ? "" : "hidden"}" style="margin-top:10px"><input data-field="useBrightness" type="checkbox" ${device.useBrightness ? "checked" : ""}> Dim bulb at night/day levels (not just on/off)</label>
+        <details style="margin-top:12px"><summary style="cursor:pointer;color:var(--muted)">Advanced: Tuya DP codes</summary>
+          <p class="hint" style="margin-top:10px">Data points (DPs) are the command names Tuya uses for power and dimming. DuskPlug fills these when you add a device — change them only if on/off or brightness does not work.</p>
           <div class="grid cols-2" style="margin-top:10px">
-            <label>Switch code<input data-field="switchCode" value="${device.switchCode || "switch_1"}"></label>
-            <label>Brightness code<input data-field="brightnessCode" value="${device.brightnessCode || ""}"></label>
+            <label>Switch code (on/off)<input data-field="switchCode" value="${device.switchCode || "switch_1"}"></label>
+            <label class="bulb-only ${isBulb ? "" : "hidden"}">Brightness code (dimming)<input data-field="brightnessCode" value="${device.brightnessCode || ""}" placeholder="bright_value"></label>
           </div>
+          <p class="hint" style="margin-bottom:0">Plugs usually use <code>switch_1</code>. Bulbs usually use <code>switch_led</code> plus a brightness code such as <code>bright_value</code> or <code>bright_value_v2</code>. Leave brightness blank for plugs. If control fails, check the device’s function list in the Tuya developer portal.</p>
         </details>
         ${prefix === "detail" ? '<button type="button" class="btn" id="backToList" style="margin-top:12px">← Back to devices</button><button type="button" class="btn" id="removeDevice" style="margin-top:12px;margin-left:8px">Remove device</button>' : ""}
         ${prefix === "single" ? `
@@ -327,7 +346,6 @@
       $("brightnessNightOut").textContent = String(config.screenBrightnessNight || 20);
       $("brightnessDayOut").textContent = String(config.screenBrightnessDay || 80);
       $("windowFacing").value = String(config.windowAzimuthDegrees ?? -1);
-      $("screenBrightnessAdaptive").checked = !!config.screenBrightnessAdaptive;
       const select = $("dataCenter"); select.innerHTML = "";
       (dataCenters || []).forEach(item => { const opt = document.createElement("option"); opt.value = String(item.id); opt.textContent = item.label; select.appendChild(opt); });
       select.value = String(config.dataCenterIndex || 0);
@@ -349,7 +367,6 @@
         screenBrightnessNight: Number($("brightnessNight").value),
         screenBrightnessDay: Number($("brightnessDay").value),
         windowAzimuthDegrees: Number($("windowFacing").value),
-        screenBrightnessAdaptive: $("screenBrightnessAdaptive").checked,
         devices: devices
       };
     }
@@ -371,6 +388,15 @@
       fillShared(data.config || {}, data.dataCenters || []);
       renderViews();
     }
+
+    function bindBrightnessSlider(sliderId, outputId) {
+      const slider = $(sliderId);
+      const output = $(outputId);
+      if (!slider || !output) return;
+      slider.addEventListener("input", () => { output.textContent = slider.value; });
+    }
+    bindBrightnessSlider("brightnessNight", "brightnessNightOut");
+    bindBrightnessSlider("brightnessDay", "brightnessDayOut");
 
     $("toggleSecret").onclick = () => { const i = $("clientSecret"); const h = i.type === "password"; i.type = h ? "text" : "password"; $("toggleSecret").textContent = h ? "Hide" : "Show"; };
     $("discoverDevice").onclick = () => { const id = $("newDeviceId").value.trim(); if (!id) return showToast("Enter a device ID.", "error"); showToast("Discovering device…"); postNative({ type: "discoverDevice", deviceId: id }); };

@@ -197,18 +197,49 @@ bool SmartModeController::IsScreenBrightnessAvailable() const {
 }
 
 int SmartModeController::GetScreenBrightnessPercent() const {
+    const int hardware = ReadHardwareBrightnessPercent();
+    if (screenBrightnessEnabled_) {
+        const int target = ComputeScreenBrightnessTarget();
+        if (BrightnessDriftedFromTarget(target, hardware)) {
+            return hardware;
+        }
+        return target;
+    }
+
     const int lastApplied = (hasAppliedBrightness_ && lastAppliedBrightnessPercent_ >= 0)
         ? lastAppliedBrightnessPercent_
         : -1;
-    const int hardware = brightness_ ? brightness_->GetCurrentPercent() : -1;
-    const int automaticTarget = (lastApplied < 0 && hardware < 0 && screenBrightnessEnabled_)
-        ? ComputeScreenBrightnessTarget()
-        : 50;
+    const int automaticTarget = 50;
     return ResolveDisplayedScreenBrightnessPercent(
         lastApplied,
         hardware,
-        screenBrightnessEnabled_,
+        false,
         automaticTarget);
+}
+
+int SmartModeController::ReadHardwareBrightnessPercent() const {
+    return brightness_ ? brightness_->GetCurrentPercent() : -1;
+}
+
+void SmartModeController::EnsureLocationForBrightness() {
+    if (!screenBrightnessEnabled_) {
+        return;
+    }
+
+    if (config_.hasLatitude && config_.hasLongitude) {
+        return;
+    }
+
+    if (!locationService_) {
+        return;
+    }
+
+    if (hasLocation_ && !LocationIsStale(locationResolvedAtMs_)) {
+        return;
+    }
+
+    std::string error;
+    EnsureLocation(error, false);
 }
 
 void SmartModeController::SetScreenBrightnessPercent(int percent) {
@@ -216,7 +247,6 @@ void SmartModeController::SetScreenBrightnessPercent(int percent) {
         return;
     }
 
-    percent = ClampScreenBrightnessPercent(percent);
     brightnessUnavailableNotified_ = false;
 
     if (!brightnessCaptured_) {
@@ -224,15 +254,7 @@ void SmartModeController::SetScreenBrightnessPercent(int percent) {
         brightnessCaptured_ = true;
     }
 
-    if (brightness_->SetPercent(percent)) {
-        hasAppliedBrightness_ = true;
-        lastAppliedBrightnessPercent_ = percent;
-    } else if (!brightnessUnavailableNotified_ && callbacks_.showSetupMessage) {
-        brightnessUnavailableNotified_ = true;
-        callbacks_.showSetupMessage(
-            "Could not change screen brightness. On laptops, check that no other app is "
-            "controlling brightness. On external monitors, enable DDC/CI in the monitor menu.");
-    }
+    BeginBrightnessTransition(ClampScreenBrightnessPercent(percent));
 }
 
 bool SmartModeController::EnsureLocation(std::string& error, bool promptForLocation) {
@@ -453,9 +475,7 @@ int SmartModeController::ComputeScreenBrightnessTarget() const {
         hasCoords = true;
     }
 
-    if (hasCoords
-        && config_.screenBrightnessAdaptive
-        && config_.windowAzimuthDegrees >= 0) {
+    if (hasCoords && config_.windowAzimuthDegrees >= 0) {
         const LocalNow now = GetLocalNow();
         const SunPosition sun = ComputeSunPosition(
             latitude,
@@ -485,7 +505,127 @@ void SmartModeController::NotifyScreenBrightnessChanged() {
     }
 }
 
+int SmartModeController::CurrentAppliedBrightnessPercent() const {
+    if (hasAppliedBrightness_ && lastAppliedBrightnessPercent_ >= 0) {
+        return lastAppliedBrightnessPercent_;
+    }
+    if (brightness_) {
+        const int hardware = brightness_->GetCurrentPercent();
+        if (hardware >= 0) {
+            return hardware;
+        }
+    }
+    return -1;
+}
+
+void SmartModeController::StopBrightnessFade() {
+    if (!brightnessFadeActive_) {
+        return;
+    }
+
+    brightnessFadeActive_ = false;
+    if (callbacks_.onBrightnessFadeFinished) {
+        callbacks_.onBrightnessFadeFinished();
+    }
+}
+
+void SmartModeController::ApplyBrightnessImmediate(int percent, bool notifyUi) {
+    if (!brightness_) {
+        return;
+    }
+
+    percent = ClampScreenBrightnessPercent(percent);
+    if (hasAppliedBrightness_
+        && lastAppliedBrightnessPercent_ >= 0
+        && lastAppliedBrightnessPercent_ == percent) {
+        const int hardware = ReadHardwareBrightnessPercent();
+        if (!screenBrightnessEnabled_ || !BrightnessDriftedFromTarget(percent, hardware)) {
+            return;
+        }
+    }
+
+    if (brightness_->SetPercent(percent)) {
+        hasAppliedBrightness_ = true;
+        lastAppliedBrightnessPercent_ = percent;
+        if (notifyUi) {
+            NotifyScreenBrightnessChanged();
+        }
+        return;
+    }
+
+    if (!brightnessUnavailableNotified_ && callbacks_.showSetupMessage) {
+        brightnessUnavailableNotified_ = true;
+        callbacks_.showSetupMessage(
+            "Could not change screen brightness. On laptops, check that no other app is "
+            "controlling brightness. On external monitors, enable DDC/CI in the monitor menu.");
+    }
+}
+
+void SmartModeController::BeginBrightnessTransition(int target) {
+    if (!brightness_) {
+        return;
+    }
+
+    target = ClampScreenBrightnessPercent(target);
+    const int hardware = ReadHardwareBrightnessPercent();
+    if (brightnessFadeActive_ && brightnessFadeTo_ == target
+        && !BrightnessDriftedFromTarget(target, hardware)) {
+        return;
+    }
+    if (brightnessFadeActive_ && brightnessFadeTo_ == target
+        && BrightnessDriftedFromTarget(target, hardware)) {
+        StopBrightnessFade();
+    }
+
+    int current = CurrentAppliedBrightnessPercent();
+    if (screenBrightnessEnabled_ && hardware >= 0) {
+        current = hardware;
+    } else if (current < 0) {
+        current = target;
+    }
+
+    const uint64_t durationMs = BrightnessFadeDurationMs(current, target);
+    if (durationMs == 0) {
+        StopBrightnessFade();
+        ApplyBrightnessImmediate(target);
+        return;
+    }
+
+    const bool wasFading = brightnessFadeActive_;
+    brightnessFadeFrom_ = current;
+    brightnessFadeTo_ = target;
+    brightnessFadeStartMs_ = MonotonicTimeMs();
+    brightnessFadeDurationMs_ = durationMs;
+    brightnessFadeActive_ = true;
+
+    if (!wasFading && callbacks_.onBrightnessFadeStarted) {
+        callbacks_.onBrightnessFadeStarted();
+    }
+
+    OnBrightnessFadeTick();
+}
+
+void SmartModeController::OnBrightnessFadeTick() {
+    if (!brightnessFadeActive_ || !brightness_) {
+        return;
+    }
+
+    const uint64_t elapsed = MonotonicTimeMs() - brightnessFadeStartMs_;
+    const double progress = brightnessFadeDurationMs_ == 0
+        ? 1.0
+        : static_cast<double>(elapsed) / static_cast<double>(brightnessFadeDurationMs_);
+    const int percent = InterpolateBrightnessPercent(brightnessFadeFrom_, brightnessFadeTo_, progress);
+    const bool notifyUi = screenBrightnessEnabled_ || progress >= 1.0;
+    ApplyBrightnessImmediate(percent, notifyUi);
+
+    if (progress >= 1.0) {
+        ApplyBrightnessImmediate(brightnessFadeTo_, true);
+        StopBrightnessFade();
+    }
+}
+
 void SmartModeController::ReleaseBrightness() {
+    StopBrightnessFade();
     if (brightnessCaptured_ && brightness_) {
         brightness_->Restore();
         brightnessCaptured_ = false;
@@ -515,26 +655,8 @@ void SmartModeController::ApplyBrightness() {
         brightnessCaptured_ = true;
     }
 
-    const int target = ComputeScreenBrightnessTarget();
-    if (hasAppliedBrightness_
-        && lastAppliedBrightnessPercent_ >= 0
-        && std::abs(lastAppliedBrightnessPercent_ - target) < 1) {
-        return;
-    }
-
-    if (brightness_->SetPercent(target)) {
-        hasAppliedBrightness_ = true;
-        lastAppliedBrightnessPercent_ = target;
-        NotifyScreenBrightnessChanged();
-        return;
-    }
-
-    if (!brightnessUnavailableNotified_ && callbacks_.showSetupMessage) {
-        brightnessUnavailableNotified_ = true;
-        callbacks_.showSetupMessage(
-            "Could not change screen brightness. On laptops, check that no other app is "
-            "controlling brightness. On external monitors, enable DDC/CI in the monitor menu.");
-    }
+    EnsureLocationForBrightness();
+    BeginBrightnessTransition(ComputeScreenBrightnessTarget());
 }
 
 void SmartModeController::ApplyDesiredState(const DeviceConfig& device, const DesiredDeviceState& desired) {
@@ -602,17 +724,6 @@ void SmartModeController::UpdateTrayFromRuntimeState() {
 }
 
 void SmartModeController::Evaluate() {
-    ApplyBrightness();
-
-    if (!HasAutomatedDevices()) {
-        UpdateTrayFromRuntimeState();
-        return;
-    }
-
-    if (powerOffHold_) {
-        return;
-    }
-
     bool needsSmartLocation = false;
     for (const auto& device : config_.devices) {
         if (DeviceUsesSmart(device)) {
@@ -624,6 +735,18 @@ void SmartModeController::Evaluate() {
     if (needsSmartLocation && LocationIsStale(locationResolvedAtMs_)) {
         std::string error;
         EnsureLocation(error, false);
+    }
+
+    EnsureLocationForBrightness();
+    ApplyBrightness();
+
+    if (!HasAutomatedDevices()) {
+        UpdateTrayFromRuntimeState();
+        return;
+    }
+
+    if (powerOffHold_) {
+        return;
     }
 
     if (HasAutomatedDevices()) {

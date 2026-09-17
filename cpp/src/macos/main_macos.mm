@@ -31,6 +31,7 @@
 @property(nonatomic, strong) NSTimer* pollTimer;
 @property(nonatomic, strong) NSTimer* smartTimer;
 @property(nonatomic, strong) NSTimer* lockTimer;
+@property(nonatomic, strong) NSTimer* brightnessFadeTimer;
 - (void)rebuildMenu;
 @end
 
@@ -272,6 +273,24 @@ void StartAutomationTimers(DuskPlugAppDelegate* delegate) {
     }];
 }
 
+void StartBrightnessFadeTimer(DuskPlugAppDelegate* delegate) {
+    if (delegate.brightnessFadeTimer) {
+        return;
+    }
+    delegate.brightnessFadeTimer = [NSTimer scheduledTimerWithTimeInterval:0.033 repeats:YES block:^(__unused NSTimer* timer) {
+        g_app.smart.OnBrightnessFadeTick();
+        if (!g_app.smart.IsBrightnessFadeActive()) {
+            [delegate.brightnessFadeTimer invalidate];
+            delegate.brightnessFadeTimer = nil;
+        }
+    }];
+}
+
+void StopBrightnessFadeTimer(DuskPlugAppDelegate* delegate) {
+    [delegate.brightnessFadeTimer invalidate];
+    delegate.brightnessFadeTimer = nil;
+}
+
 }  // namespace
 
 @implementation DuskPlugAppDelegate
@@ -380,6 +399,8 @@ void StartAutomationTimers(DuskPlugAppDelegate* delegate) {
         };
         callbacks.showSetupMessage = ShowMessage;
         callbacks.isBusy = []() { return g_app.busy.load(); };
+        callbacks.onBrightnessFadeStarted = [self]() { StartBrightnessFadeTimer(self); };
+        callbacks.onBrightnessFadeFinished = [self]() { StopBrightnessFadeTimer(self); };
         g_app.smart.Initialize(
             g_app.config,
             g_app.client.get(),

@@ -241,7 +241,6 @@ std::string BuildSettingsBootJson(const AppConfig& config, const char* platform)
     json += "\"lockOffSeconds\":" + std::to_string(config.lockOffSeconds) + ",";
     json += "\"screenBrightnessNight\":" + std::to_string(config.screenBrightnessNight) + ",";
     json += "\"screenBrightnessDay\":" + std::to_string(config.screenBrightnessDay) + ",";
-    json += "\"screenBrightnessAdaptive\":" + std::string(config.screenBrightnessAdaptive ? "true" : "false") + ",";
     json += "\"windowAzimuthDegrees\":" + std::to_string(config.windowAzimuthDegrees);
     json += "}}";
     return json;
@@ -372,12 +371,7 @@ bool ApplySettingsFromJson(const std::string& json, AppConfig& config, std::stri
         windowAzimuth = -1;
     }
     config.windowAzimuthDegrees = windowAzimuth;
-
-    bool screenBrightnessAdaptive = config.screenBrightnessAdaptive;
-    if (!ReadBoolField(json, "screenBrightnessAdaptive", screenBrightnessAdaptive)) {
-        screenBrightnessAdaptive = false;
-    }
-    config.screenBrightnessAdaptive = screenBrightnessAdaptive;
+    config.screenBrightnessAdaptive = windowAzimuth >= 0;
 
     SyncLegacyFieldsFromDevices(config);
     error.clear();

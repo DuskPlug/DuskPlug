@@ -46,6 +46,8 @@ constexpr UINT IDT_POLL = 1001;
 constexpr UINT IDT_SMART = 1002;
 constexpr UINT IDT_LOCK = 1003;
 constexpr UINT IDT_TIMED = 1004;
+constexpr UINT IDT_BRIGHTNESS_FADE = 1005;
+constexpr UINT kBrightnessFadeIntervalMs = 50;
 constexpr UINT ID_MENU_TITLE = 10000;
 constexpr UINT CMD_ON = 10001;
 constexpr UINT CMD_OFF = 10002;
@@ -86,6 +88,7 @@ struct AppState {
     bool busy = false;
     bool hasKnownState = false;
     bool knownOn = false;
+    bool pendingTimedCustomDialog = false;
     std::wstring appDir;
     AppConfig config;
     std::unique_ptr<TuyaClient> client;
@@ -162,6 +165,7 @@ void FinishStartup() {
         g_app.smart.Evaluate();
     } else {
         if (g_app.smart.IsScreenBrightnessEnabled()) {
+            StartAutomationTimers();
             g_app.smart.Evaluate();
         }
         RunPlugAction(false, false, true);
@@ -192,25 +196,100 @@ void ShowSetupBalloon(const wchar_t* text) {
 void SetEnabledDevicesAutomationMode(DeviceAutomationMode mode);
 void SetTimedModeFromTray(int minutes);
 
+constexpr size_t kTrayTooltipMaxLen = 127;
+DWORD g_lastTrayTooltipRefreshMs = 0;
+
+void AppendTooltipLine(std::wstring& tip, const std::wstring& line) {
+    if (line.empty() || tip.size() >= kTrayTooltipMaxLen) {
+        return;
+    }
+
+    if (!tip.empty()) {
+        if (tip.size() + 1 > kTrayTooltipMaxLen) {
+            return;
+        }
+        tip.push_back(L'\n');
+    }
+
+    const size_t room = kTrayTooltipMaxLen - tip.size();
+    tip.append(line, 0, line.size() > room ? room : line.size());
+}
+
+std::wstring TrimTooltipName(const std::wstring& name, size_t maxChars) {
+    if (name.size() <= maxChars) {
+        return name;
+    }
+    if (maxChars <= 1) {
+        return name.substr(0, maxChars);
+    }
+    return name.substr(0, maxChars - 1) + L"\u2026";
+}
+
+void FormatTrayTooltip(std::wstring& tip) {
+    tip.clear();
+    AppendTooltipLine(tip, L"DuskPlug");
+
+    const auto devices = GetEnabledDevices(g_app.config);
+    if (devices.empty()) {
+        AppendTooltipLine(tip, L"No devices configured");
+    } else {
+        const size_t maxNameLen = devices.size() > 2 ? 12 : 18;
+        for (const auto* device : devices) {
+            const std::wstring name = TrimTooltipName(Utf8ToWide(device->name), maxNameLen);
+            const wchar_t* state = L"unknown";
+            if (g_app.smart.HasDeviceKnownState(device->id)) {
+                state = g_app.smart.GetDeviceKnownOn(device->id) ? L"ON" : L"OFF";
+            }
+            AppendTooltipLine(tip, name + L": " + state);
+        }
+    }
+
+    if (g_app.brightnessController && g_app.brightnessController->AnyControllable()) {
+        const int percent = g_app.smart.GetScreenBrightnessPercent();
+        if (g_app.smart.IsScreenBrightnessEnabled()) {
+            AppendTooltipLine(
+                tip,
+                L"Screen: " + std::to_wstring(percent) + L"% (automatic)");
+        } else {
+            AppendTooltipLine(tip, L"Screen: " + std::to_wstring(percent) + L"%");
+        }
+    }
+}
+
+void ApplyTrayTooltip() {
+    std::wstring tip;
+    FormatTrayTooltip(tip);
+    if (tip.empty()) {
+        return;
+    }
+
+    if (tip == g_app.nid.szTip) {
+        return;
+    }
+
+    wcsncpy_s(g_app.nid.szTip, tip.c_str(), _TRUNCATE);
+    g_app.nid.uFlags = NIF_TIP | NIF_GUID;
+    g_app.nid.guidItem = kTrayIconGuid;
+    Shell_NotifyIconW(NIM_MODIFY, &g_app.nid);
+}
+
+void RefreshTrayTooltipOnHover() {
+    const DWORD now = GetTickCount();
+    if (now - g_lastTrayTooltipRefreshMs < 200) {
+        return;
+    }
+    g_lastTrayTooltipRefreshMs = now;
+    ApplyTrayTooltip();
+}
+
 void UpdateTrayDisplay(bool anyOn, size_t onCount, size_t totalCount) {
     const bool automated = g_app.smart.HasAutomatedDevices() || g_app.smart.IsTimedModeActive();
     HICON icon = anyOn ? g_app.iconOn : g_app.iconOff;
-    wchar_t tip[128] = L"DuskPlug";
 
     if (automated) {
         icon = anyOn
             ? (g_app.iconSmartOn ? g_app.iconSmartOn : g_app.iconOn)
             : (g_app.iconSmartOff ? g_app.iconSmartOff : g_app.iconOff);
-    }
-
-    if (totalCount <= 1) {
-        swprintf_s(
-            tip,
-            automated
-                ? (anyOn ? L"Light: AUTO — ON" : L"Light: AUTO — OFF")
-                : (anyOn ? L"Light: ON (click to toggle)" : L"Light: OFF (click to toggle)"));
-    } else {
-        swprintf_s(tip, L"DuskPlug: %zu of %zu on", onCount, totalCount);
     }
 
     if (!icon) {
@@ -222,7 +301,11 @@ void UpdateTrayDisplay(bool anyOn, size_t onCount, size_t totalCount) {
     }
 
     g_app.nid.hIcon = CopyIcon(icon);
-    wcscpy_s(g_app.nid.szTip, tip);
+    {
+        std::wstring tip;
+        FormatTrayTooltip(tip);
+        wcsncpy_s(g_app.nid.szTip, tip.c_str(), _TRUNCATE);
+    }
     g_app.nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID;
     g_app.nid.guidItem = kTrayIconGuid;
     Shell_NotifyIconW(NIM_MODIFY, &g_app.nid);
@@ -239,7 +322,7 @@ void RestoreTrayState() {
         return;
     }
 
-    wcscpy_s(g_app.nid.szTip, L"DuskPlug: status unknown");
+    ApplyTrayTooltip();
     g_app.nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID;
     g_app.nid.guidItem = kTrayIconGuid;
     Shell_NotifyIconW(NIM_MODIFY, &g_app.nid);
@@ -961,6 +1044,17 @@ void ShowContextMenu() {
         0,
         g_app.hwnd,
         nullptr);
+    HideBrightnessPanel();
+    if (g_app.pendingTimedCustomDialog) {
+        g_app.pendingTimedCustomDialog = false;
+        int minutes = g_app.smart.GetTimedDurationMinutes();
+        if (minutes <= 0) {
+            minutes = 30;
+        }
+        if (PromptTimedMinutes(g_app.hwnd, minutes)) {
+            SetTimedModeFromTray(minutes);
+        }
+    }
     PostMessageW(g_app.hwnd, WM_NULL, 0, 0);
 }
 
@@ -1000,6 +1094,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_app.smart.OnLockTimerTick();
         } else if (wParam == IDT_TIMED) {
             g_app.smart.OnTimedModeTick();
+        } else if (wParam == IDT_BRIGHTNESS_FADE) {
+            g_app.smart.OnBrightnessFadeTick();
+            if (!g_app.smart.IsBrightnessFadeActive()) {
+                KillTimer(hwnd, IDT_BRIGHTNESS_FADE);
+            }
         }
         return 0;
 
@@ -1029,7 +1128,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return TRUE;
 
     case WM_TRAYICON:
-        if (LOWORD(lParam) == WM_LBUTTONUP) {
+        if (LOWORD(lParam) == WM_MOUSEMOVE) {
+            RefreshTrayTooltipOnHover();
+        } else if (LOWORD(lParam) == WM_LBUTTONUP) {
             EnsureManualModeFromTray();
             RunPlugAction(true, false, false);
         } else if (LOWORD(lParam) == WM_RBUTTONUP) {
@@ -1119,16 +1220,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case CMD_SCHEDULE_MODE:
             ToggleScheduleModeFromTray();
             break;
-        case CMD_TIMED_CUSTOM: {
-            int minutes = g_app.smart.GetTimedDurationMinutes();
-            if (minutes <= 0) {
-                minutes = 30;
-            }
-            if (PromptTimedMinutes(g_app.hwnd, minutes)) {
-                SetTimedModeFromTray(minutes);
-            }
+        case CMD_TIMED_CUSTOM:
+            // DialogBox cannot run while TrackPopupMenu's modal loop is active.
+            g_app.pendingTimedCustomDialog = true;
             break;
-        }
         case CMD_LOCK_OFF:
             g_app.smart.ToggleLockOffEnabled();
             UpdateContextMenuChecks();
@@ -1183,6 +1278,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         KillTimer(hwnd, IDT_SMART);
         KillTimer(hwnd, IDT_LOCK);
         KillTimer(hwnd, IDT_TIMED);
+        KillTimer(hwnd, IDT_BRIGHTNESS_FADE);
         if (g_app.suspendNotify) {
             UnregisterSuspendResumeNotification(g_app.suspendNotify);
             g_app.suspendNotify = nullptr;
@@ -1366,7 +1462,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     g_app.nid.uCallbackMessage = WM_TRAYICON;
     g_app.nid.hIcon = CopyIcon(g_app.iconOff);
     g_app.nid.guidItem = kTrayIconGuid;
-    wcscpy_s(g_app.nid.szTip, L"Plug: starting...");
+    wcscpy_s(g_app.nid.szTip, L"DuskPlug\nStarting...");
     if (!AddTrayIcon()) {
         MessageBoxW(nullptr, L"Could not create tray icon", L"DuskPlug", MB_ICONERROR | MB_OK);
         return 1;
@@ -1380,6 +1476,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         return g_app.brightnessController && g_app.brightnessController->AnyControllable();
     };
     brightnessCallbacks.getPercent = []() { return CurrentManualBrightnessPercent(); };
+    brightnessCallbacks.getHardwarePercent = []() {
+        return g_app.brightnessController
+            ? g_app.brightnessController->GetCurrentPercent()
+            : -1;
+    };
     brightnessCallbacks.setPercent = [](int percent) {
         g_app.smart.SetScreenBrightnessPercent(percent);
     };
@@ -1392,6 +1493,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         }
         g_app.smart.SetScreenBrightnessEnabled(enabled);
         UpdateContextMenuChecks();
+        ApplyTrayTooltip();
         if (enabled) {
             ShowSetupBalloon(L"Automatic screen brightness is now on.");
         }
@@ -1431,6 +1533,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         };
         callbacks.onScreenBrightnessChanged = []() {
             SyncBrightnessPanelAutoState();
+            ApplyTrayTooltip();
+        };
+        callbacks.onBrightnessFadeStarted = []() {
+            SetTimer(g_app.hwnd, IDT_BRIGHTNESS_FADE, kBrightnessFadeIntervalMs, nullptr);
+        };
+        callbacks.onBrightnessFadeFinished = []() {
+            KillTimer(g_app.hwnd, IDT_BRIGHTNESS_FADE);
         };
         g_app.smart.Initialize(
             g_app.config,

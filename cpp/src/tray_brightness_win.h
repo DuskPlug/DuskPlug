@@ -10,6 +10,7 @@
 struct TrayBrightnessCallbacks {
     std::function<bool()> isAvailable;
     std::function<int()> getPercent;
+    std::function<int()> getHardwarePercent;
     std::function<void(int)> setPercent;
     std::function<bool()> isAutoEnabled;
     std::function<void(bool)> setAutoEnabled;
