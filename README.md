@@ -8,13 +8,9 @@ Free, open source, and MIT-licensed. You only need your own free Tuya cloud proj
 
 ## Screenshots
 
-**System tray** (real Windows 11 taskbar):
+**Tray menu** (real Windows 11 capture — Smart Mode, screen brightness):
 
-![DuskPlug in the system tray](docs/screenshots/tray-in-taskbar.png)
-
-**Context menu**:
-
-![Tray context menu with Smart Mode enabled](docs/screenshots/tray-menu.png)
+![DuskPlug tray menu with Smart Mode and screen brightness](docs/screenshots/tray-menu.png)
 
 **Settings**:
 
@@ -52,8 +48,6 @@ scoop install duskplug
 **Linux:** download **DuskPlug-Linux-x64.tar.gz**, extract it, and run `./duskplug`. GNOME may need an [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) for the tray icon.
 
 **macOS:** download **DuskPlug-macOS.zip**, unzip **DuskPlug.app**, and open it (unsigned builds: right-click → Open the first time). Allow location access when Smart Mode requests it.
-
-Code signing via [SignPath Foundation](https://signpath.org) (pending approval). Windows builds will be Authenticode-signed once approved. macOS builds are unsigned until Apple notarization is set up.
 
 If you cloned this repo instead, run **`Build-DuskPlug.cmd`**. **`Build-Msi.cmd`** builds the installer (needs the .NET SDK).
 

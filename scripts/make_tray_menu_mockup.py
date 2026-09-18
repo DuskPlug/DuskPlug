@@ -1,4 +1,10 @@
-"""Styled tray context menu mockup for README (matches DuskPlug menu items)."""
+"""Deprecated: tray-menu.png is a real Windows capture in docs/screenshots/source/."""
+import sys
+
+print("tray-menu.png is maintained manually from docs/screenshots/source/tray-menu.png", file=sys.stderr)
+raise SystemExit(1)
+
+# Legacy mockup code kept for reference only.
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont

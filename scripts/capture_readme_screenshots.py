@@ -350,12 +350,8 @@ def capture_settings_dialog() -> bool:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
 
-    render_context_menu().save(OUT / "tray-menu.png")
-    render_taskbar_snippet().save(OUT / "tray-in-taskbar.png")
-
-    render_icon(128, on=True).save(OUT / "tray-manual-on.png")
-    render_icon(128, on=True, smart=True).save(OUT / "tray-smart-on.png")
-    render_icon(128, on=False).save(OUT / "tray-off.png")
+    # Tray screenshots are real Windows captures kept in docs/screenshots/source/.
+    # Do not regenerate tray-menu.png or tray-in-taskbar.png from mockups.
 
     if capture_settings_dialog():
         print("Captured live settings window.")
