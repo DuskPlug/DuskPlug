@@ -196,4 +196,22 @@ Remove-Item -Force -ErrorAction SilentlyContinue @(
 Copy-DuskPlugRuntimeDlls -Gpp $Gpp -DestDir $Root
 Invoke-DuskPlugBinaryCompatChecks -ExePath $Out -RootDir $Root -Gpp $Gpp -RunSelfTest
 
+$UpdaterOut = Join-Path $Root 'DuskPlugUpdate.exe'
+$UpdaterSrc = Join-Path $Src 'updater_win.cpp'
+$UpdaterObj = Join-Path $ObjDir 'updater_win.o'
+$updaterFlags = @(
+    '-std=c++17'
+) + $optFlags + @(
+    '-municode', '-mconsole',
+    '-static-libgcc', '-static-libstdc++'
+)
+$needUpdaterBuild = $flagsChanged -or (Test-AnyInputNewerThan -OutputPath $UpdaterOut -Inputs @($UpdaterSrc))
+if ($needUpdaterBuild) {
+    Write-Host 'Building DuskPlugUpdate.exe...' -ForegroundColor Cyan
+    & $Gpp @($updaterFlags + @('-c', $UpdaterSrc, '-o', $UpdaterObj))
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $Gpp @($updaterFlags + @($UpdaterObj, '-o', $UpdaterOut, '-lshell32'))
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
 Write-Host "Built $Out ($ConfigName)" -ForegroundColor Green

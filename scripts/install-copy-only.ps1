@@ -57,6 +57,9 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir 'assets') | Out-Null
 
     Copy-Item -Force (Join-Path $Root 'DuskPlug.exe') (Join-Path $InstallDir 'DuskPlug.exe')
+    if (Test-Path (Join-Path $Root 'DuskPlugUpdate.exe')) {
+        Copy-Item -Force (Join-Path $Root 'DuskPlugUpdate.exe') (Join-Path $InstallDir 'DuskPlugUpdate.exe')
+    }
     Copy-Item -Force (Join-Path $Root 'WebView2Loader.dll') (Join-Path $InstallDir 'WebView2Loader.dll')
     Copy-Item -Force (Join-Path $Root 'libwinpthread-1.dll') (Join-Path $InstallDir 'libwinpthread-1.dll')
     Copy-Item -Force (Join-Path $Root 'assets\*') (Join-Path $InstallDir 'assets\')
