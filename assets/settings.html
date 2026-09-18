@@ -68,6 +68,11 @@
     .subsection { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--card-border); }
     .subsection:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
     .subsection h3 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-2); }
+    .brightness-preview { margin-top: 10px; }
+    .brightness-preview svg { width: 100%; height: 168px; display: block; }
+    .brightness-preview-meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+    .brightness-preview-meta strong { color: var(--text); font-variant-numeric: tabular-nums; }
+    .brightness-preview-empty { margin-top: 10px; padding: 12px 14px; border-radius: 10px; border: 1px dashed var(--card-border); color: var(--muted); font-size: 12.5px; }
   </style>
 </head>
 <body>
@@ -154,7 +159,23 @@
             <option value="315">North-west</option>
           </select>
         </label>
-        <p class="hint">Example: an east-facing window is brighter in the morning when sun hits the glass, and closer to the night level when the sun is behind the house.</p>
+        <label style="margin-top:10px">Blend curve
+          <div class="bright-row"><input id="windowGlareWeight" type="range" min="0" max="100" step="1"><output id="windowGlareWeightOut">Balanced</output></div>
+        </label>
+        <p class="hint">Soft keeps brightness higher when the sun is near your window; Sharp only reaches the day level when the sun is more directly on the glass.</p>
+      </div>
+
+      <div class="subsection" id="brightnessPreviewSection">
+        <h3>Today's preview</h3>
+        <p class="hint">Estimated automatic brightness through today based on your location and settings above. The marker shows the current time.</p>
+        <div class="brightness-preview-empty hidden" id="brightnessPreviewEmpty">Set a home location above to preview brightness through the day.</div>
+        <div class="brightness-preview hidden" id="brightnessPreviewWrap">
+          <svg id="brightnessPreviewChart" viewBox="0 0 400 140" role="img" aria-label="Estimated screen brightness through the day"></svg>
+          <div class="brightness-preview-meta">
+            <span>Now: <strong id="brightnessPreviewNow">—</strong></span>
+            <span id="brightnessPreviewMode">Window blend</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -336,6 +357,7 @@
     }
 
     function fillShared(config, dataCenters) {
+      sharedConfig = config || {};
       $("clientId").value = config.clientId || "";
       $("clientSecret").value = config.clientSecret || "";
       $("latitude").value = Number(config.latitude || 0).toFixed(6);
@@ -346,9 +368,13 @@
       $("brightnessNightOut").textContent = String(config.screenBrightnessNight || 20);
       $("brightnessDayOut").textContent = String(config.screenBrightnessDay || 80);
       $("windowFacing").value = String(config.windowAzimuthDegrees ?? -1);
+      const glarePercent = Math.round((config.windowGlareWeight ?? 0.5) * 100);
+      $("windowGlareWeight").value = String(glarePercent);
+      $("windowGlareWeightOut").textContent = blendCurveLabel(glarePercent);
       const select = $("dataCenter"); select.innerHTML = "";
       (dataCenters || []).forEach(item => { const opt = document.createElement("option"); opt.value = String(item.id); opt.textContent = item.label; select.appendChild(opt); });
       select.value = String(config.dataCenterIndex || 0);
+      refreshBrightnessPreview();
     }
 
     function collectPayload() {
@@ -367,11 +393,17 @@
         screenBrightnessNight: Number($("brightnessNight").value),
         screenBrightnessDay: Number($("brightnessDay").value),
         windowAzimuthDegrees: Number($("windowFacing").value),
+        windowGlareWeight: Number($("windowGlareWeight").value) / 100,
         devices: devices
       };
     }
 
-    window.duskplugSetLocation = (lat, lon) => { $("latitude").value = Number(lat).toFixed(6); $("longitude").value = Number(lon).toFixed(6); showToast("Location updated.", "ok"); };
+    window.duskplugSetLocation = (lat, lon) => {
+      $("latitude").value = Number(lat).toFixed(6);
+      $("longitude").value = Number(lon).toFixed(6);
+      showToast("Location updated.", "ok");
+      refreshBrightnessPreview();
+    };
     window.duskplugShowError = (message) => showToast(message || "Something went wrong.", "error");
     window.duskplugApplyDiscovery = (data) => {
       devices.push(Object.assign(defaultDevice(), { id: data.deviceId, name: data.deviceId, type: data.type, switchCode: data.switchCode, brightnessCode: data.brightnessCode || "", brightnessMin: data.brightnessMin || 10, brightnessMax: data.brightnessMax || 1000, useBrightness: data.type === "bulb" }));
@@ -381,6 +413,241 @@
       renderViews();
     };
 
+    function blendCurveLabel(percent) {
+      if (percent < 34) return "Soft";
+      if (percent < 67) return "Balanced";
+      return "Sharp";
+    }
+
+    let sharedConfig = {};
+
+    const PREVIEW = (() => {
+      const PI = Math.PI;
+      const rad = d => d * PI / 180;
+      const fixAngle = d => { let a = d % 360; if (a < 0) a += 360; return a; };
+      const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+      const normalizeMinutes = m => { while (m < 0) m += 1440; while (m >= 1440) m -= 1440; return Math.round(m); };
+      const dayOfYear = (year, month, day) => {
+        const days = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+        let doy = days[month - 1] + day;
+        const leap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+        if (month > 2 && leap) doy += 1;
+        return doy;
+      };
+      const curveExponent = glareWeight => Math.pow(2, (clamp(glareWeight, 0, 1) - 0.5) * 2);
+      const applyCurve = (intoWindow, glareWeight) => {
+        const t = clamp(intoWindow, 0, 1);
+        if (t <= 0) return 0;
+        if (t >= 1) return 1;
+        return Math.pow(t, curveExponent(glareWeight));
+      };
+      const computeSunPosition = (lat, lng, year, month, day, hour, minute, utcOffsetMinutes) => {
+        let civil = hour * 60 + minute;
+        let utc = civil - utcOffsetMinutes;
+        while (utc < 0) utc += 1440;
+        while (utc >= 1440) utc -= 1440;
+        hour = Math.floor(utc / 60);
+        minute = utc % 60;
+        const doy = dayOfYear(year, month, day);
+        const latRad = rad(lat);
+        const lngHour = lng / 15;
+        const timeDecimal = hour + minute / 60;
+        const t = doy + ((timeDecimal / 24) - (lngHour / 24));
+        const m = (0.9856 * t) - 3.289;
+        const l = m + (1.916 * Math.sin(rad(m))) + (0.020 * Math.sin(rad(2 * m))) + 282.634;
+        const lNorm = fixAngle(l);
+        let ra = Math.atan(0.91764 * Math.tan(rad(lNorm))) * 180 / PI;
+        ra = fixAngle(ra);
+        if (lNorm >= 90 && lNorm < 270) ra += 180;
+        ra = fixAngle(ra);
+        const eqTime = 4 * (lNorm - ra);
+        const sinDec = 0.39782 * Math.sin(rad(lNorm));
+        const cosDec = Math.cos(Math.asin(sinDec));
+        let trueSolar = timeDecimal * 60 + eqTime + 4 * lng;
+        trueSolar = ((trueSolar % 1440) + 1440) % 1440;
+        const hourAngle = (trueSolar / 4) - 180;
+        const cosZen = sinDec * Math.sin(latRad) + cosDec * Math.cos(latRad) * Math.cos(rad(hourAngle));
+        const zenith = Math.acos(clamp(cosZen, -1, 1));
+        const elevation = 90 - (zenith * 180 / PI);
+        const sinAz = -Math.sin(rad(hourAngle)) * cosDec;
+        const cosAz = (Math.cos(rad(hourAngle)) * cosDec * Math.sin(latRad)) - (sinDec * Math.cos(latRad));
+        const azimuth = fixAngle(Math.atan2(sinAz, cosAz) * 180 / PI);
+        return { azimuth, elevation };
+      };
+      const windowSunExposure = (sunAz, sunElev, windowAz, glareWeight) => {
+        if (sunElev <= 0) return 0;
+        let angleDiff = Math.abs(fixAngle(sunAz - windowAz));
+        if (angleDiff > 180) angleDiff = 360 - angleDiff;
+        const intoWindow = (Math.cos(rad(angleDiff)) + 1) * 0.5;
+        const lowSunFade = clamp(sunElev / 5, 0, 1);
+        return clamp(applyCurve(intoWindow, glareWeight) * lowSunFade, 0, 1);
+      };
+      const computeSolarTimes = (lat, lng, year, month, day, utcOffsetMinutes) => {
+        const doy = dayOfYear(year, month, day);
+        const latRad = rad(lat);
+        const lngHour = lng / 15;
+        const t = doy + ((6 - lngHour) / 24);
+        const m = (0.9856 * t) - 3.289;
+        const l = m + (1.916 * Math.sin(rad(m))) + (0.020 * Math.sin(rad(2 * m))) + 282.634;
+        const lNorm = fixAngle(l);
+        let ra = Math.atan(0.91764 * Math.tan(rad(lNorm))) * 180 / PI;
+        ra = fixAngle(ra);
+        if (lNorm >= 90 && lNorm < 270) ra += 180;
+        ra = fixAngle(ra);
+        const eqTime = 4 * (lNorm - ra);
+        const sinDec = 0.39782 * Math.sin(rad(lNorm));
+        const cosDec = Math.cos(Math.asin(sinDec));
+        const cosH = (Math.cos(rad(90.833)) - (sinDec * Math.sin(latRad))) / (cosDec * Math.cos(latRad));
+        if (cosH > 1 || cosH < -1) return { sunriseMinutes: 6 * 60, sunsetMinutes: 18 * 60 };
+        const hourAngle = Math.acos(cosH) * 180 / PI;
+        return {
+          sunriseMinutes: normalizeMinutes(720 - (4 * (lng + hourAngle)) - eqTime + utcOffsetMinutes),
+          sunsetMinutes: normalizeMinutes(720 - (4 * (lng - hourAngle)) - eqTime + utcOffsetMinutes),
+        };
+      };
+      const isNightAt = (minuteOfDay, times, darkOffset, lightOffset) => {
+        const darkStart = times.sunsetMinutes + darkOffset;
+        const lightStart = times.sunriseMinutes - lightOffset;
+        if (lightStart <= darkStart) return minuteOfDay >= darkStart || minuteOfDay < lightStart;
+        return minuteOfDay >= darkStart && minuteOfDay < lightStart;
+      };
+      const brightnessAt = (params, hour, minute) => {
+        const night = clamp(Math.round(params.night), 0, 100);
+        const day = clamp(Math.round(params.day), 0, 100);
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const dayOfMonth = now.getDate();
+        const utcOffset = -now.getTimezoneOffset();
+        if (!Number.isFinite(params.lat) || !Number.isFinite(params.lng) || (params.lat === 0 && params.lng === 0)) return null;
+        if (params.windowAz >= 0) {
+          const sun = computeSunPosition(params.lat, params.lng, year, month, dayOfMonth, hour, minute, utcOffset);
+          const factor = windowSunExposure(sun.azimuth, sun.elevation, params.windowAz, params.glareWeight);
+          return clamp(Math.round(night + (day - night) * factor), 0, 100);
+        }
+        const times = computeSolarTimes(params.lat, params.lng, year, month, dayOfMonth, utcOffset);
+        const minuteOfDay = hour * 60 + minute;
+        return isNightAt(minuteOfDay, times, params.darkOffset, params.lightOffset) ? night : day;
+      };
+      return { brightnessAt };
+    })();
+
+    function getPreviewParams() {
+      return {
+        lat: Number($("latitude").value),
+        lng: Number($("longitude").value),
+        night: Number($("brightnessNight").value),
+        day: Number($("brightnessDay").value),
+        windowAz: Number($("windowFacing").value),
+        glareWeight: Number($("windowGlareWeight").value) / 100,
+        darkOffset: Number.isFinite(sharedConfig.darkOffsetMinutes) ? sharedConfig.darkOffsetMinutes : -30,
+        lightOffset: Number.isFinite(sharedConfig.lightOffsetMinutes) ? sharedConfig.lightOffsetMinutes : -30,
+      };
+    }
+
+    function formatClock(hour, minute) {
+      return String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
+    }
+
+    function refreshBrightnessPreview() {
+      const params = getPreviewParams();
+      const empty = $("brightnessPreviewEmpty");
+      const wrap = $("brightnessPreviewWrap");
+      const chart = $("brightnessPreviewChart");
+      const nowOut = $("brightnessPreviewNow");
+      const modeOut = $("brightnessPreviewMode");
+      if (!empty || !wrap || !chart) return;
+      if (!Number.isFinite(params.lat) || !Number.isFinite(params.lng) || (Math.abs(params.lat) < 0.0001 && Math.abs(params.lng) < 0.0001)) {
+        empty.classList.remove("hidden");
+        wrap.classList.add("hidden");
+        return;
+      }
+      empty.classList.add("hidden");
+      wrap.classList.remove("hidden");
+      modeOut.textContent = params.windowAz >= 0 ? "Window direction blend" : "Sunrise / sunset switch";
+
+      const samples = [];
+      for (let hour = 0; hour < 24; hour += 1) {
+        samples.push({ hour, value: PREVIEW.brightnessAt(params, hour, 0) });
+      }
+      const now = new Date();
+      const nowValue = PREVIEW.brightnessAt(params, now.getHours(), now.getMinutes());
+      nowOut.textContent = nowValue == null ? "—" : nowValue + "%";
+
+      const width = 400;
+      const height = 140;
+      const pad = { left: 34, right: 12, top: 12, bottom: 28 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+      const xAt = hour => pad.left + (hour / 23) * plotW;
+      const yAt = value => pad.top + plotH - (value / 100) * plotH;
+      const linePoints = samples.map(s => `${xAt(s.hour).toFixed(1)},${yAt(s.value).toFixed(1)}`).join(" ");
+      const areaPoints = `${pad.left},${pad.top + plotH} ${linePoints} ${pad.left + plotW},${pad.top + plotH}`;
+      const nowX = xAt(now.getHours() + now.getMinutes() / 60);
+      const hourLabels = [0, 6, 12, 18, 23];
+      const gridLines = [0, 50, 100].map(v => {
+        const y = yAt(v).toFixed(1);
+        return `<line x1="${pad.left}" y1="${y}" x2="${pad.left + plotW}" y2="${y}" stroke="rgba(255,255,255,0.08)" />`
+          + `<text x="${pad.left - 6}" y="${Number(y) + 4}" fill="var(--muted)" font-size="10" text-anchor="end">${v}%</text>`;
+      }).join("");
+      const xLabels = hourLabels.map(h => `<text x="${xAt(h).toFixed(1)}" y="${height - 8}" fill="var(--muted)" font-size="10" text-anchor="middle">${formatClock(h, 0)}</text>`).join("");
+      chart.innerHTML = `
+        ${gridLines}
+        <polygon points="${areaPoints}" fill="rgba(231,163,90,0.18)" />
+        <polyline points="${linePoints}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+        <line x1="${nowX.toFixed(1)}" y1="${pad.top}" x2="${nowX.toFixed(1)}" y2="${pad.top + plotH}" stroke="var(--accent-2)" stroke-width="1.5" stroke-dasharray="4 3" />
+        <circle cx="${nowX.toFixed(1)}" cy="${yAt(nowValue || 0).toFixed(1)}" r="4.5" fill="var(--accent-2)" />
+        ${xLabels}
+      `;
+    }
+
+    function bindPreviewInputs() {
+      ["brightnessNight", "brightnessDay", "windowFacing", "windowGlareWeight", "latitude", "longitude"].forEach(id => {
+        const el = $(id);
+        if (!el) return;
+        el.addEventListener("input", refreshBrightnessPreview);
+        el.addEventListener("change", refreshBrightnessPreview);
+      });
+    }
+
+    function bindBrightnessSlider(sliderId, outputId, onInput) {
+      const slider = $(sliderId);
+      const output = $(outputId);
+      if (!slider || !output) return;
+      slider.addEventListener("input", () => {
+        output.textContent = slider.value;
+        if (onInput) onInput();
+      });
+    }
+
+    function bindBlendCurveSlider() {
+      const slider = $("windowGlareWeight");
+      const output = $("windowGlareWeightOut");
+      if (!slider || !output) return;
+      const refresh = () => {
+        output.textContent = blendCurveLabel(Number(slider.value));
+        refreshBrightnessPreview();
+      };
+      slider.addEventListener("input", refresh);
+      refresh();
+    }
+
+    bindBrightnessSlider("brightnessNight", "brightnessNightOut", refreshBrightnessPreview);
+    bindBrightnessSlider("brightnessDay", "brightnessDayOut", refreshBrightnessPreview);
+    bindBlendCurveSlider();
+    bindPreviewInputs();
+
+    $("toggleSecret").onclick = () => { const i = $("clientSecret"); const h = i.type === "password"; i.type = h ? "text" : "password"; $("toggleSecret").textContent = h ? "Hide" : "Show"; };
+    $("discoverDevice").onclick = () => { const id = $("newDeviceId").value.trim(); if (!id) return showToast("Enter a device ID.", "error"); showToast("Discovering device…"); postNative({ type: "discoverDevice", deviceId: id }); };
+    $("detectLocation").onclick = () => { showToast("Detecting location…"); postNative({ type: "detectLocation" }); };
+    $("applyCoords").onclick = () => {
+      postNative({ type: "parseCoords", text: $("pasteCoords").value, reportError: true });
+      setTimeout(refreshBrightnessPreview, 0);
+    };
+    $("save").onclick = () => { showToast("Saving…"); postNative(collectPayload()); };
+    $("cancel").onclick = () => postNative({ type: "cancel" });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") postNative({ type: "cancel" }); });
+
     function boot(data) {
       if (!data) return;
       $("version").textContent = data.version ? "v" + data.version : "";
@@ -389,22 +656,6 @@
       renderViews();
     }
 
-    function bindBrightnessSlider(sliderId, outputId) {
-      const slider = $(sliderId);
-      const output = $(outputId);
-      if (!slider || !output) return;
-      slider.addEventListener("input", () => { output.textContent = slider.value; });
-    }
-    bindBrightnessSlider("brightnessNight", "brightnessNightOut");
-    bindBrightnessSlider("brightnessDay", "brightnessDayOut");
-
-    $("toggleSecret").onclick = () => { const i = $("clientSecret"); const h = i.type === "password"; i.type = h ? "text" : "password"; $("toggleSecret").textContent = h ? "Hide" : "Show"; };
-    $("discoverDevice").onclick = () => { const id = $("newDeviceId").value.trim(); if (!id) return showToast("Enter a device ID.", "error"); showToast("Discovering device…"); postNative({ type: "discoverDevice", deviceId: id }); };
-    $("detectLocation").onclick = () => { showToast("Detecting location…"); postNative({ type: "detectLocation" }); };
-    $("applyCoords").onclick = () => postNative({ type: "parseCoords", text: $("pasteCoords").value, reportError: true });
-    $("save").onclick = () => { showToast("Saving…"); postNative(collectPayload()); };
-    $("cancel").onclick = () => postNative({ type: "cancel" });
-    document.addEventListener("keydown", e => { if (e.key === "Escape") postNative({ type: "cancel" }); });
     boot(BOOT);
   </script>
 </body>

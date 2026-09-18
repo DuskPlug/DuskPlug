@@ -7,6 +7,7 @@
 #include "tuya_client.h"
 #include "version.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -241,7 +242,12 @@ std::string BuildSettingsBootJson(const AppConfig& config, const char* platform)
     json += "\"lockOffSeconds\":" + std::to_string(config.lockOffSeconds) + ",";
     json += "\"screenBrightnessNight\":" + std::to_string(config.screenBrightnessNight) + ",";
     json += "\"screenBrightnessDay\":" + std::to_string(config.screenBrightnessDay) + ",";
-    json += "\"windowAzimuthDegrees\":" + std::to_string(config.windowAzimuthDegrees);
+    json += "\"windowAzimuthDegrees\":" + std::to_string(config.windowAzimuthDegrees) + ",";
+    char glareNumber[32];
+    snprintf(glareNumber, sizeof(glareNumber), "%.2f", config.windowGlareWeight);
+    json += "\"windowGlareWeight\":" + std::string(glareNumber) + ",";
+    json += "\"darkOffsetMinutes\":" + std::to_string(config.darkOffsetMinutes) + ",";
+    json += "\"lightOffsetMinutes\":" + std::to_string(config.lightOffsetMinutes);
     json += "}}";
     return json;
 }
@@ -372,6 +378,11 @@ bool ApplySettingsFromJson(const std::string& json, AppConfig& config, std::stri
     }
     config.windowAzimuthDegrees = windowAzimuth;
     config.screenBrightnessAdaptive = windowAzimuth >= 0;
+
+    double glareWeight = config.windowGlareWeight;
+    if (ReadDoubleField(json, "windowGlareWeight", glareWeight)) {
+        config.windowGlareWeight = std::clamp(glareWeight, 0.0, 1.0);
+    }
 
     SyncLegacyFieldsFromDevices(config);
     error.clear();

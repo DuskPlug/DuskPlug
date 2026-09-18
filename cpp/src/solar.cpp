@@ -2,6 +2,8 @@
 
 #include "config.h"
 
+#include "brightness.h"
+
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -287,6 +289,6 @@ double WindowSunExposure(
     constexpr double kMinElevationForFullExposure = 5.0;
     const double lowSunFade = std::clamp(sunElevation / kMinElevationForFullExposure, 0.0, 1.0);
 
-    (void)glareWeight;
-    return std::clamp(intoWindow * lowSunFade, 0.0, 1.0);
+    const double curved = ApplyWindowExposureCurve(intoWindow, glareWeight);
+    return std::clamp(curved * lowSunFade, 0.0, 1.0);
 }

@@ -1,6 +1,8 @@
 #include "../src/brightness.h"
 #include "test_assert.h"
 
+#include <cmath>
+
 TEST(DisplayedBrightnessPrefersLastAppliedOverHardware) {
     EXPECT_EQ(ResolveDisplayedScreenBrightnessPercent(20, 70, true, 20), 20);
 }
@@ -42,6 +44,19 @@ TEST(BrightnessDriftDetectsMismatch) {
     EXPECT_FALSE(BrightnessDriftedFromTarget(100, -1));
 }
 
+TEST(WindowExposureCurveIsLinearAtDefault) {
+    EXPECT_TRUE(std::fabs(ApplyWindowExposureCurve(0.5, 0.5) - 0.5) < 0.001);
+    EXPECT_TRUE(std::fabs(ApplyWindowExposureCurve(0.8, 0.5) - 0.8) < 0.001);
+}
+
+TEST(WindowExposureCurveSoftRaisesMidpoint) {
+    EXPECT_TRUE(ApplyWindowExposureCurve(0.5, 0.2) > 0.5);
+}
+
+TEST(WindowExposureCurveSharpLowersMidpoint) {
+    EXPECT_TRUE(ApplyWindowExposureCurve(0.5, 0.8) < 0.5);
+}
+
 void RunBrightnessDisplayTests() {
     std::printf("brightness display tests\n");
     RUN_TEST(DisplayedBrightnessPrefersLastAppliedOverHardware);
@@ -53,4 +68,7 @@ void RunBrightnessDisplayTests() {
     RUN_TEST(InterpolatedBrightnessMidpointIsBetweenEndpoints);
     RUN_TEST(BrightnessFadeDurationScalesWithDelta);
     RUN_TEST(BrightnessDriftDetectsMismatch);
+    RUN_TEST(WindowExposureCurveIsLinearAtDefault);
+    RUN_TEST(WindowExposureCurveSoftRaisesMidpoint);
+    RUN_TEST(WindowExposureCurveSharpLowersMidpoint);
 }

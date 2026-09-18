@@ -64,7 +64,7 @@ struct AppConfig {
     int screenBrightnessDay = 80;
     bool screenBrightnessAdaptive = false;
     int windowAzimuthDegrees = -1;
-    double windowGlareWeight = 0.6;
+    double windowGlareWeight = 0.5;
     std::string scheduleOnTime = "18:00";
     std::string scheduleOffTime = "23:00";
     bool hasScheduleTimes = false;

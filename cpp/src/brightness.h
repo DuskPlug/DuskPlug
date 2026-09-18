@@ -49,6 +49,24 @@ inline uint64_t BrightnessFadeDurationMs(int from, int to) {
     return duration > 1500ULL ? 1500ULL : duration;
 }
 
+// Maps stored glare weight (0..1, default 0.5 = linear) to a power-curve exponent.
+// Lower weight = softer blend; higher = sharper (full day only when sun is square-on).
+inline double WindowExposureCurveExponent(double glareWeight) {
+    const double weight = std::clamp(glareWeight, 0.0, 1.0);
+    return std::pow(2.0, (weight - 0.5) * 2.0);
+}
+
+inline double ApplyWindowExposureCurve(double intoWindow, double glareWeight) {
+    const double t = std::clamp(intoWindow, 0.0, 1.0);
+    if (t <= 0.0) {
+        return 0.0;
+    }
+    if (t >= 1.0) {
+        return 1.0;
+    }
+    return std::pow(t, WindowExposureCurveExponent(glareWeight));
+}
+
 class IBrightnessController {
 public:
     virtual ~IBrightnessController() = default;
