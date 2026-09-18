@@ -121,7 +121,7 @@ bool ShowMacSettingsDialog(const std::string& configPath, AppConfig& config) {
             return false;
         }
 
-        const std::string page = InjectSettingsBoot(html, BuildSettingsBootJson(config, "macos"));
+        const std::string page = PrepareSettingsHtml(html, BuildSettingsBootJson(config, "macos"));
 
         WKWebViewConfiguration* configuration = [[WKWebViewConfiguration alloc] init];
         DuskPlugSettingsHost* host = [[DuskPlugSettingsHost alloc] init];

@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <fstream>
 
 namespace {
 
@@ -22,14 +21,6 @@ std::string NormalizeHex(const std::string& hex) {
         }
     }
     return out;
-}
-
-std::string ReadBinaryFile(const std::string& path) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        return {};
-    }
-    return std::string((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
 }
 
 }  // namespace

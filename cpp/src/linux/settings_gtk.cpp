@@ -157,7 +157,7 @@ bool ShowLinuxSettingsDialog(const std::string& configPath, AppConfig& config) {
         return false;
     }
 
-    const std::string page = InjectSettingsBoot(html, BuildSettingsBootJson(config, "linux"));
+    const std::string page = PrepareSettingsHtml(html, BuildSettingsBootJson(config, "linux"));
 
     SettingsHost host{};
     host.configPath = configPath;

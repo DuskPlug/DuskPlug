@@ -61,6 +61,8 @@ Full walkthrough (Tuya portal screens, linking the phone app, and every Settings
 
 Privacy: [Privacy Policy](docs/PRIVACY.md)
 
+Support development: [Buy me a coffee](https://buymeacoffee.com/duskplug)
+
 ## Set up a Tuya cloud project (one-time)
 
 You need a free [Tuya Developer Platform](https://iot.tuya.com) project so Windows can talk to the same plug as your phone. The plug must already work in **Smart Life**, **Tuya**, or **Status**.

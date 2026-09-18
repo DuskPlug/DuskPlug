@@ -214,6 +214,81 @@ std::string ReadTextFile(const std::string& path) {
     return contents;
 }
 
+std::string ReadBinaryFile(const std::string& path) {
+#ifdef _WIN32
+    const std::wstring widePath = Utf8ToWide(path);
+    HANDLE file = CreateFileW(
+        widePath.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return {};
+    }
+
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file, &size) || size.QuadPart <= 0 || size.QuadPart > 8 * 1024 * 1024) {
+        CloseHandle(file);
+        return {};
+    }
+
+    std::string contents(static_cast<size_t>(size.QuadPart), '\0');
+    DWORD read = 0;
+    const BOOL ok = ReadFile(file, contents.data(), static_cast<DWORD>(contents.size()), &read, nullptr);
+    CloseHandle(file);
+    if (!ok || read == 0) {
+        return {};
+    }
+    contents.resize(read);
+    return contents;
+#else
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        return {};
+    }
+    return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+#endif
+}
+
+std::string Base64Encode(const std::string& bytes) {
+    static const char kAlphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    std::string out;
+    out.reserve(((bytes.size() + 2) / 3) * 4);
+
+    size_t index = 0;
+    while (index + 2 < bytes.size()) {
+        const unsigned char b0 = static_cast<unsigned char>(bytes[index++]);
+        const unsigned char b1 = static_cast<unsigned char>(bytes[index++]);
+        const unsigned char b2 = static_cast<unsigned char>(bytes[index++]);
+        out.push_back(kAlphabet[b0 >> 2]);
+        out.push_back(kAlphabet[((b0 & 0x03) << 4) | (b1 >> 4)]);
+        out.push_back(kAlphabet[((b1 & 0x0F) << 2) | (b2 >> 6)]);
+        out.push_back(kAlphabet[b2 & 0x3F]);
+    }
+
+    if (index < bytes.size()) {
+        const unsigned char b0 = static_cast<unsigned char>(bytes[index++]);
+        out.push_back(kAlphabet[b0 >> 2]);
+        if (index < bytes.size()) {
+            const unsigned char b1 = static_cast<unsigned char>(bytes[index++]);
+            out.push_back(kAlphabet[((b0 & 0x03) << 4) | (b1 >> 4)]);
+            out.push_back(kAlphabet[(b1 & 0x0F) << 2]);
+            out.push_back('=');
+        } else {
+            out.push_back(kAlphabet[(b0 & 0x03) << 4]);
+            out.push_back('=');
+            out.push_back('=');
+        }
+    }
+
+    return out;
+}
+
 bool WriteTextFile(const std::string& path, const std::string& contents) {
     const size_t slash = path.find_last_of("/\\");
     if (slash != std::string::npos) {

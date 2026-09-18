@@ -4,6 +4,7 @@
 
 #include "json_util.h"
 #include "platform_util.h"
+#include "settings_page.h"
 
 #include <dwmapi.h>
 #include <objbase.h>
@@ -464,7 +465,7 @@ bool PromptTimedMinutes(HWND owner, int& minutes) {
 
     TimedHost host{};
     host.minutes = ClampTimedDurationMinutes(minutes > 0 ? minutes : 30);
-    host.html = Utf8ToWide(InjectTimedBoot(htmlUtf8, BuildTimedBootJson(host.minutes)));
+    host.html = Utf8ToWide(InjectTimedBoot(InjectBrandMark(htmlUtf8), BuildTimedBootJson(host.minutes)));
 
     HINSTANCE instance = GetModuleHandleW(nullptr);
     WNDCLASSEXW wc{};

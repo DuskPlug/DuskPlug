@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
+SCREENSHOTS = ROOT / "docs" / "screenshots"
 
 # DuskPlug palette
 ON_TOP = (255, 196, 92)
@@ -263,8 +264,18 @@ def save_ico(path: Path, renderer, *, sizes: list[int]) -> None:
     path.write_bytes(header + entries + blob)
 
 
+def render_app_tile(size: int) -> Image.Image:
+    return _with_app_tile(render_icon(size, on=True, smart=True), size)
+
+
+def save_png(path: Path, image: Image.Image) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(path, format="PNG", optimize=True)
+
+
 def main() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
+    SCREENSHOTS.mkdir(parents=True, exist_ok=True)
     tray_sizes = [16, 20, 24, 32, 48]
     app_sizes = [16, 24, 32, 48, 64, 128, 256]
 
@@ -273,13 +284,17 @@ def main() -> None:
     save_ico(ASSETS / "light-smart-on.ico", lambda s: render_icon(s, on=True, smart=True), sizes=tray_sizes)
     save_ico(ASSETS / "light-smart-off.ico", lambda s: render_icon(s, on=False, smart=True), sizes=tray_sizes)
     save_ico(ASSETS / "light-smart.ico", lambda s: render_icon(s, on=True, smart=True), sizes=tray_sizes)
-    save_ico(
-        ASSETS / "app.ico",
-        lambda s: _with_app_tile(render_icon(s, on=True, smart=True), s),
-        sizes=app_sizes,
-    )
+    save_ico(ASSETS / "app.ico", render_app_tile, sizes=app_sizes)
+
+    # Small tile for Settings / Timed mode headers (42 px @ 2x).
+    save_png(ASSETS / "brand-mark.png", render_app_tile(84))
+
+    # High-resolution PNG exports for docs, store listings, and Buy Me a Coffee.
+    for size in (128, 256, 512, 1024):
+        save_png(SCREENSHOTS / f"icon-app-{size}.png", render_app_tile(size))
 
     print(f"Generated icons in {ASSETS}")
+    print(f"Generated PNG exports in {SCREENSHOTS}")
 
 
 if __name__ == "__main__":

@@ -59,6 +59,18 @@ TEST(InjectSettingsBootReplacesToken) {
     EXPECT_EQ(InjectSettingsBoot(html, "{\"ok\":true}"), "boot({\"ok\":true});");
 }
 
+TEST(InjectBrandMarkLeavesHtmlWhenTokenMissing) {
+    const std::string html = "<img src=\"placeholder\">";
+    EXPECT_EQ(InjectBrandMark(html), html);
+}
+
+TEST(PrepareSettingsHtmlAppliesBootAfterBrandMark) {
+    const std::string html = "<img src=\"/*__DUSKPLUG_MARK__*/\">boot(/*__DUSKPLUG_BOOT__*/null);";
+    const std::string prepared = PrepareSettingsHtml(html, "{\"ok\":true}");
+    EXPECT_TRUE(prepared.find("boot({\"ok\":true});") != std::string::npos);
+    EXPECT_TRUE(prepared.find("/*__DUSKPLUG_BOOT__*/") == std::string::npos);
+}
+
 TEST(BuildSettingsBootJsonContainsFields) {
     const AppConfig config = MakeSampleConfig();
     const std::string json = BuildSettingsBootJson(config, "windows");
@@ -126,6 +138,8 @@ void RunSettingsPageTests() {
     std::printf("settings page tests\n");
     RUN_TEST(JsonEscapeQuotesAndTags);
     RUN_TEST(InjectSettingsBootReplacesToken);
+    RUN_TEST(InjectBrandMarkLeavesHtmlWhenTokenMissing);
+    RUN_TEST(PrepareSettingsHtmlAppliesBootAfterBrandMark);
     RUN_TEST(BuildSettingsBootJsonContainsFields);
     RUN_TEST(ApplySettingsFromJsonRequiresCredentials);
     RUN_TEST(ApplySettingsFromJsonAcceptsValidPayload);

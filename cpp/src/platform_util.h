@@ -9,6 +9,8 @@ std::string GetStatePath();
 std::string ResolveConfigPath(const std::string& legacyAdjacentPath);
 
 std::string ReadTextFile(const std::string& path);
+std::string ReadBinaryFile(const std::string& path);
+std::string Base64Encode(const std::string& bytes);
 bool WriteTextFile(const std::string& path, const std::string& contents);
 bool EnsureDirectoryExists(const std::string& dir);
 bool FileExists(const std::string& path);

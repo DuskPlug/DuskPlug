@@ -410,7 +410,7 @@ bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& c
     SettingsHost host{};
     host.configPath = configPath;
     host.config = &config;
-    host.html = Utf8ToWide(InjectSettingsBoot(htmlUtf8, BuildSettingsBootJson(config, "windows")));
+    host.html = Utf8ToWide(PrepareSettingsHtml(htmlUtf8, BuildSettingsBootJson(config, "windows")));
 
     HINSTANCE instance = GetModuleHandleW(nullptr);
     WNDCLASSEXW wc{};

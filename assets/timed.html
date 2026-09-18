@@ -23,7 +23,7 @@
       display: flex; flex-direction: column;
     }
     header { display: flex; align-items: center; gap: 14px; padding: 18px 24px 10px; }
-    .mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(160deg, #ffd7a1 0%, #e7a35a 42%, #5b3a7a 100%); display: grid; place-items: center; }
+    .mark { width: 38px; height: 38px; border-radius: 11px; display: block; flex-shrink: 0; object-fit: contain; }
     .brand h1 { margin: 0; font-size: 17px; font-weight: 650; }
     .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
     main { flex: 1; overflow: auto; padding: 6px 24px 16px; }
@@ -47,7 +47,7 @@
 </head>
 <body>
   <header>
-    <div class="mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 3c4.2 2.2 7 6.2 7 10.5A7 7 0 1 1 7.6 6.2C9 4.7 10.5 3.7 12 3z" fill="#1b1208" opacity=".9"/></svg></div>
+    <img class="mark" src="/*__DUSKPLUG_MARK__*/" alt="" aria-hidden="true">
     <div class="brand">
       <h1>Timed mode</h1>
       <p>Turn devices on now, then off automatically.</p>

@@ -91,6 +91,9 @@
         <File Source="..\assets\light-smart-off.ico" />
       </Component>
       <Component>
+        <File Source="..\assets\brand-mark.png" />
+      </Component>
+      <Component>
         <File Source="..\assets\settings.html" />
       </Component>
       <Component>

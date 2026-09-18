@@ -31,16 +31,16 @@ const char* DataCenterLabel(int index) {
     }
 }
 
-std::string FindSettingsHtmlPath() {
+std::string FindAssetPath(const char* filename) {
     const std::string exeDir = GetExeDirectory();
     const std::vector<std::string> candidates = {
 #ifdef __APPLE__
-        exeDir + "/../Resources/settings.html",
+        exeDir + "/../Resources/" + filename,
 #endif
-        exeDir + "/assets/settings.html",
-        exeDir + "/../assets/settings.html",
-        exeDir + "/../../assets/settings.html",
-        "assets/settings.html",
+        exeDir + "/assets/" + filename,
+        exeDir + "/../assets/" + filename,
+        exeDir + "/../../assets/" + filename,
+        std::string("assets/") + filename,
     };
 
     for (const auto& path : candidates) {
@@ -49,6 +49,10 @@ std::string FindSettingsHtmlPath() {
         }
     }
     return {};
+}
+
+std::string FindSettingsHtmlPath() {
+    return FindAssetPath("settings.html");
 }
 
 std::string NormalizeScheduleTime(const std::string& text) {
@@ -252,6 +256,24 @@ std::string BuildSettingsBootJson(const AppConfig& config, const char* platform)
     return json;
 }
 
+std::string InjectBrandMark(const std::string& html) {
+    const std::string token = "/*__DUSKPLUG_MARK__*/";
+    const size_t pos = html.find(token);
+    if (pos == std::string::npos) {
+        return html;
+    }
+
+    const std::string path = FindAssetPath("brand-mark.png");
+    const std::string bytes = path.empty() ? std::string{} : ReadBinaryFile(path);
+    if (bytes.empty()) {
+        return html;
+    }
+
+    std::string out = html;
+    out.replace(pos, token.size(), "data:image/png;base64," + Base64Encode(bytes));
+    return out;
+}
+
 std::string InjectSettingsBoot(const std::string& html, const std::string& bootJson) {
     const std::string token = "/*__DUSKPLUG_BOOT__*/null";
     const size_t pos = html.find(token);
@@ -261,6 +283,10 @@ std::string InjectSettingsBoot(const std::string& html, const std::string& bootJ
     std::string out = html;
     out.replace(pos, token.size(), bootJson);
     return out;
+}
+
+std::string PrepareSettingsHtml(const std::string& html, const std::string& bootJson) {
+    return InjectSettingsBoot(InjectBrandMark(html), bootJson);
 }
 
 std::string JsCallSetLocation(double latitude, double longitude) {

@@ -23,7 +23,9 @@ struct SettingsWebResult {
 
 std::string LoadSettingsHtml();
 std::string BuildSettingsBootJson(const AppConfig& config, const char* platform);
+std::string InjectBrandMark(const std::string& html);
 std::string InjectSettingsBoot(const std::string& html, const std::string& bootJson);
+std::string PrepareSettingsHtml(const std::string& html, const std::string& bootJson);
 std::string JsCallSetLocation(double latitude, double longitude);
 std::string JsCallShowError(const std::string& message, bool openLocationSettings);
 std::string JsonEscape(const std::string& text);
