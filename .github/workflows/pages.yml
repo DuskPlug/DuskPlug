@@ -5,6 +5,7 @@ on:
     branches: [master, main]
     paths:
       - 'docs/site/**'
+      - 'docs/screenshots/icon-app-256.png'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -28,6 +29,9 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
+      - name: Prepare site assets
+        run: cp docs/screenshots/icon-app-256.png docs/site/logo.png
 
       - name: Upload site
         uses: actions/upload-pages-artifact@v3

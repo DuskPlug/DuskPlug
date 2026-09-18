@@ -38,6 +38,14 @@
     a:hover { color: var(--accent-hover); }
     .wrap { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
     header { text-align: center; padding: 2rem 0 1rem; }
+    .logo {
+      width: 88px;
+      height: 88px;
+      margin: 0 auto 1rem;
+      display: block;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
     h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.75rem; line-height: 1.2; }
     .tagline { font-size: 1.15rem; color: var(--muted); max-width: 42rem; margin: 0 auto 1.5rem; }
     .badges { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 2rem; }
@@ -97,16 +105,26 @@
     ul.features { padding-left: 1.25rem; }
     ul.features li { margin-bottom: 0.5rem; }
     .screenshots {
-      display: grid;
-      gap: 1rem;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .screenshots figure {
+      width: 100%;
+      max-width: 760px;
+      margin: 0;
     }
     .screenshots img {
-      width: 100%;
+      display: block;
+      max-width: 100%;
+      width: auto;
+      height: auto;
+      margin: 0 auto;
       border-radius: 8px;
       border: 1px solid var(--border);
     }
-    .screenshots figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 0.35rem; }
+    .screenshots figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; text-align: center; }
     footer {
       border-top: 1px solid var(--border);
       margin-top: 3rem;
@@ -128,6 +146,7 @@
 <body>
   <div class="wrap">
     <header>
+      <img class="logo" src="logo.png" alt="DuskPlug logo" width="88" height="88">
       <h1>DuskPlug</h1>
       <p class="tagline">
         A free, open-source tray and menu bar app for Tuya and Smart Life smart plugs on Windows, Linux, and macOS.
@@ -139,7 +158,7 @@
         <span class="badge">macOS</span>
         <span class="badge">Tuya / Smart Life</span>
         <span class="badge">MIT License</span>
-        <span class="badge">v1.0.15</span>
+        <span class="badge">v1.0.21</span>
       </div>
     </header>
 
@@ -201,6 +220,7 @@ scoop install duskplug</pre>
         <li><strong>Multi-device</strong> — plugs and dimmable bulbs, each with its own mode</li>
         <li><strong>Your Tuya project only</strong> — credentials stay on your PC</li>
         <li><strong>Lock-off</strong> — optional turn-off when the computer is locked or sleeping</li>
+        <li><strong>Screen brightness</strong> — optional automatic monitor dimming through the day</li>
       </ul>
     </section>
 
@@ -209,11 +229,11 @@ scoop install duskplug</pre>
       <p style="color:var(--muted);font-size:0.95rem;margin:0 0 1rem;">Windows UI shown below; Linux and macOS use the same features from the tray or menu bar.</p>
       <div class="screenshots">
         <figure>
-          <img src="https://github.com/DuskPlug/DuskPlug/raw/master/docs/screenshots/tray-menu.png" alt="DuskPlug tray menu with Smart Mode and screen brightness on Windows 11" width="715" height="339" loading="lazy">
+          <img src="https://github.com/DuskPlug/DuskPlug/raw/master/docs/screenshots/tray-menu.png" alt="DuskPlug tray menu with Smart Mode and screen brightness on Windows 11" loading="lazy">
           <figcaption>Tray menu with Smart Mode and screen brightness</figcaption>
         </figure>
         <figure>
-          <img src="https://github.com/DuskPlug/DuskPlug/raw/master/docs/screenshots/settings-dialog.png" alt="DuskPlug Settings dialog" width="640" height="360" loading="lazy">
+          <img src="https://github.com/DuskPlug/DuskPlug/raw/master/docs/screenshots/settings-dialog.png" alt="DuskPlug Settings dialog" loading="lazy">
           <figcaption>Settings dialog</figcaption>
         </figure>
       </div>
