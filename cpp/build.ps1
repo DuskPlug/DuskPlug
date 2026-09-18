@@ -129,14 +129,14 @@ Write-Host "Building with $Gpp ($ConfigName, $JobCount jobs)" -ForegroundColor C
 
 $compileJobs = @()
 $objects = @()
-foreach ($src in $sources) {
-    $obj = Join-Path $ObjDir (Get-DuskPlugObjName $src)
-    $dep = Join-Path $ObjDir (Get-DuskPlugDepName $src)
+foreach ($sourcePath in $sources) {
+    $obj = Join-Path $ObjDir (Get-DuskPlugObjName $sourcePath)
+    $dep = Join-Path $ObjDir (Get-DuskPlugDepName $sourcePath)
     $objects += $obj
-    if ($flagsChanged -or (Test-CppObjectOutdated -ObjectPath $obj -SourcePath $src -DepPath $dep)) {
+    if ($flagsChanged -or (Test-CppObjectOutdated -ObjectPath $obj -SourcePath $sourcePath -DepPath $dep)) {
         $compileJobs += @{
-            Name = [IO.Path]::GetFileName($src)
-            Args = $commonFlags + @('-c', $src, '-o', $obj, '-MMD', '-MF', $dep)
+            Name = [IO.Path]::GetFileName($sourcePath)
+            Args = $commonFlags + @('-c', $sourcePath, '-o', $obj, '-MMD', '-MF', $dep)
         }
     }
 }
