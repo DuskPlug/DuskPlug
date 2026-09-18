@@ -42,6 +42,7 @@ namespace {
 constexpr UINT WM_TRAYICON = WM_APP + 1;
 constexpr UINT WM_SHOW_EXISTING = WM_APP + 3;
 constexpr UINT WM_DEFER_STARTUP = WM_APP + 4;
+constexpr UINT WM_DEFER_TIMED_CUSTOM = WM_APP + 5;
 constexpr UINT IDT_POLL = 1001;
 constexpr UINT IDT_SMART = 1002;
 constexpr UINT IDT_LOCK = 1003;
@@ -88,7 +89,6 @@ struct AppState {
     bool busy = false;
     bool hasKnownState = false;
     bool knownOn = false;
-    bool pendingTimedCustomDialog = false;
     std::wstring appDir;
     AppConfig config;
     std::unique_ptr<TuyaClient> client;
@@ -149,6 +149,7 @@ void RunPlugAction(bool toggle, bool setOn, bool statusOnly, int deviceIndex = -
 void UpdateContextMenuChecks();
 void RebuildTrayMenu();
 void RunSettings();
+void RunTimedCustomDialog();
 void ApplySettingsReload();
 
 void HandleUpdateCheckResult(const UpdateInfo& info, bool showNoUpdateMessage);
@@ -576,6 +577,16 @@ void RunSettings() {
 
     ApplySettingsReload();
     ShowSetupBalloon(L"Settings saved.");
+}
+
+void RunTimedCustomDialog() {
+    int minutes = g_app.smart.GetTimedDurationMinutes();
+    if (minutes <= 0) {
+        minutes = 30;
+    }
+    if (PromptTimedMinutes(g_app.hwnd, minutes)) {
+        SetTimedModeFromTray(minutes);
+    }
 }
 
 int CurrentManualBrightnessPercent() {
@@ -1045,16 +1056,7 @@ void ShowContextMenu() {
         g_app.hwnd,
         nullptr);
     HideBrightnessPanel();
-    if (g_app.pendingTimedCustomDialog) {
-        g_app.pendingTimedCustomDialog = false;
-        int minutes = g_app.smart.GetTimedDurationMinutes();
-        if (minutes <= 0) {
-            minutes = 30;
-        }
-        if (PromptTimedMinutes(g_app.hwnd, minutes)) {
-            SetTimedModeFromTray(minutes);
-        }
-    }
+    // Required after TrackPopupMenu before opening another window from the tray.
     PostMessageW(g_app.hwnd, WM_NULL, 0, 0);
 }
 
@@ -1073,6 +1075,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_DEFER_STARTUP:
         FinishStartup();
+        return 0;
+
+    case WM_DEFER_TIMED_CUSTOM:
+        RunTimedCustomDialog();
         return 0;
 
     case WM_SHOW_EXISTING:
@@ -1221,8 +1227,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             ToggleScheduleModeFromTray();
             break;
         case CMD_TIMED_CUSTOM:
-            // DialogBox cannot run while TrackPopupMenu's modal loop is active.
-            g_app.pendingTimedCustomDialog = true;
+            // Defer until after TrackPopupMenu and WM_NULL so the dialog can take focus.
+            PostMessageW(g_app.hwnd, WM_DEFER_TIMED_CUSTOM, 0, 0);
             break;
         case CMD_LOCK_OFF:
             g_app.smart.ToggleLockOffEnabled();

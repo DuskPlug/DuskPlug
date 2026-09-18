@@ -26,6 +26,8 @@ namespace {
 
 constexpr wchar_t kSettingsClass[] = L"DuskPlugSettingsHtml";
 
+HWND g_settingsHwnd = nullptr;
+
 class ComHandlerBase {
 public:
     ComHandlerBase() = default;
@@ -338,6 +340,9 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                 host->webview->Release();
                 host->webview = nullptr;
             }
+            if (g_settingsHwnd == hwnd) {
+                g_settingsHwnd = nullptr;
+            }
             host->hwnd = nullptr;
             host->alive = false;
         }
@@ -348,7 +353,27 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 
 }  // namespace
 
+bool IsSettingsDialogOpen() {
+    return g_settingsHwnd != nullptr && IsWindow(g_settingsHwnd);
+}
+
+void FocusSettingsDialog() {
+    if (!IsSettingsDialogOpen()) {
+        return;
+    }
+    if (IsIconic(g_settingsHwnd)) {
+        ShowWindow(g_settingsHwnd, SW_RESTORE);
+    }
+    ShowWindow(g_settingsHwnd, SW_SHOW);
+    SetForegroundWindow(g_settingsHwnd);
+}
+
 bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& config) {
+    if (IsSettingsDialogOpen()) {
+        FocusSettingsDialog();
+        return false;
+    }
+
     const std::string htmlUtf8 = LoadSettingsHtml();
     if (htmlUtf8.empty()) {
         MessageBoxW(
@@ -425,6 +450,8 @@ bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& c
         return false;
     }
 
+    g_settingsHwnd = hwnd;
+
     ApplyDarkTitleBar(hwnd);
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
@@ -435,6 +462,7 @@ bool ShowSettingsDialog(HWND owner, const std::wstring& configPath, AppConfig& c
     if (FAILED(envHr)) {
         ShowWebView2InstallPrompt(hwnd);
         DestroyWindow(hwnd);
+        g_settingsHwnd = nullptr;
         MSG msg{};
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);

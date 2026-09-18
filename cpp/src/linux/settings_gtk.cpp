@@ -21,6 +21,12 @@ struct SettingsHost {
     bool saved = false;
 };
 
+GtkWidget* gSettingsDialog = nullptr;
+
+void ClearSettingsDialogPointer(GtkWidget*, gpointer) {
+    gSettingsDialog = nullptr;
+}
+
 void EvalScript(SettingsHost* host, const std::string& script) {
     if (!host || !host->webview || script.empty()) {
         return;
@@ -133,6 +139,11 @@ gboolean OnContextMenu(
 }  // namespace
 
 bool ShowLinuxSettingsDialog(const std::string& configPath, AppConfig& config) {
+    if (gSettingsDialog && GTK_IS_WIDGET(gSettingsDialog)) {
+        gtk_window_present(GTK_WINDOW(gSettingsDialog));
+        return false;
+    }
+
     const std::string html = LoadSettingsHtml();
     if (html.empty()) {
         GtkWidget* error = gtk_message_dialog_new(
@@ -153,6 +164,8 @@ bool ShowLinuxSettingsDialog(const std::string& configPath, AppConfig& config) {
     host.config = &config;
 
     host.dialog = gtk_dialog_new();
+    gSettingsDialog = host.dialog;
+    g_signal_connect(host.dialog, "destroy", G_CALLBACK(ClearSettingsDialogPointer), nullptr);
     gtk_window_set_title(GTK_WINDOW(host.dialog), "DuskPlug Settings");
     gtk_window_set_default_size(GTK_WINDOW(host.dialog), 820, 920);
     gtk_window_set_modal(GTK_WINDOW(host.dialog), TRUE);

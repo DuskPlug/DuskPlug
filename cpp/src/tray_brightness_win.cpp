@@ -1,26 +1,32 @@
 #include "tray_brightness_win.h"
 
 #include <windowsx.h>
-#include <commctrl.h>
 #include <cstdio>
 
-#pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "gdi32.lib")
 
 namespace {
 
 constexpr wchar_t kPopupClass[] = L"DuskPlugBrightnessPopup";
 
-constexpr int kTrackId = 3001;
-constexpr int kLabelId = 3002;
-constexpr int kAutoCheckId = 3003;
-constexpr int kPopupWidth = 220;
-constexpr int kSliderSectionHeight = 54;
-constexpr int kAutoRowHeight = 24;
-constexpr int kPopupHeight = kSliderSectionHeight + kAutoRowHeight;
-constexpr int kAutoRowTop = kSliderSectionHeight;
+constexpr int kPopupWidth = 248;
+constexpr int kPad = 14;
+constexpr int kSliderTop = 40;
+constexpr int kSliderHeight = 20;
+constexpr int kAutoRowTop = 78;
+constexpr int kAutoRowHeight = 28;
+constexpr int kPopupHeight = kAutoRowTop + kAutoRowHeight + 6;
 constexpr UINT WM_BRIGHTNESS_SYNC = WM_APP + 20;
 constexpr UINT_PTR IDT_BRIGHTNESS_APPLY = 4001;
 constexpr DWORD kBrightnessApplyDelayMs = 500;
+
+constexpr COLORREF kBgBottom = RGB(12, 16, 24);
+constexpr COLORREF kCardBorder = RGB(48, 54, 66);
+constexpr COLORREF kText = RGB(238, 243, 248);
+constexpr COLORREF kMuted = RGB(147, 160, 180);
+constexpr COLORREF kAccent = RGB(231, 163, 90);
+constexpr COLORREF kAccent2 = RGB(139, 183, 255);
+constexpr COLORREF kTrackBg = RGB(15, 21, 32);
 
 TrayBrightnessCallbacks g_callbacks{};
 
@@ -33,12 +39,15 @@ HHOOK g_llMouseHook = nullptr;
 HHOOK g_menuFilterHook = nullptr;
 
 HCURSOR g_handCursor = nullptr;
+HFONT g_titleFont = nullptr;
+HFONT g_valueFont = nullptr;
+HFONT g_bodyFont = nullptr;
 
 bool g_classRegistered = false;
-bool g_updatingTrack = false;
 bool g_dragging = false;
 bool g_popupVisible = false;
 
+int g_currentPercent = 50;
 int g_pendingApplyPercent = -1;
 int g_lastAppliedPercent = -1;
 RECT g_lastPanelScreenRect{};
@@ -59,8 +68,14 @@ void SyncAutoCheckboxState();
 void ApplyTrackPercent(int percent, bool scheduleApply);
 void SyncPanelTrackFromSystem();
 int InitialPanelPercent();
-void PaintAutoRowSeparator(HDC dc, const RECT& clientRect);
 void ToggleAutomaticFromPanel();
+void EnsureThemeResources();
+void ReleaseThemeResources();
+RECT TrackClientRect(const RECT& clientRect);
+RECT AutoRowClientRect(const RECT& clientRect);
+bool TrackScreenRect(RECT& outRect);
+bool AutoRowScreenRect(RECT& outRect);
+void PaintPanel(HDC dc, const RECT& clientRect);
 
 int ClampPercent(int percent) {
     if (percent < 0) {
@@ -72,6 +87,73 @@ int ClampPercent(int percent) {
     return percent;
 }
 
+void EnsureThemeResources() {
+    if (g_titleFont) {
+        return;
+    }
+
+    g_titleFont = CreateFontW(
+        -12,
+        0,
+        0,
+        0,
+        FW_BOLD,
+        FALSE,
+        FALSE,
+        FALSE,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE,
+        L"Segoe UI");
+    g_valueFont = CreateFontW(
+        -18,
+        0,
+        0,
+        0,
+        FW_SEMIBOLD,
+        FALSE,
+        FALSE,
+        FALSE,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE,
+        L"Segoe UI");
+    g_bodyFont = CreateFontW(
+        -13,
+        0,
+        0,
+        0,
+        FW_NORMAL,
+        FALSE,
+        FALSE,
+        FALSE,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE,
+        L"Segoe UI");
+}
+
+void ReleaseThemeResources() {
+    if (g_titleFont) {
+        DeleteObject(g_titleFont);
+        g_titleFont = nullptr;
+    }
+    if (g_valueFont) {
+        DeleteObject(g_valueFont);
+        g_valueFont = nullptr;
+    }
+    if (g_bodyFont) {
+        DeleteObject(g_bodyFont);
+        g_bodyFont = nullptr;
+    }
+}
+
 bool PopupScreenRect(RECT& outRect) {
     if (!g_popup || !IsWindowVisible(g_popup)) {
         return false;
@@ -79,47 +161,55 @@ bool PopupScreenRect(RECT& outRect) {
     return GetWindowRect(g_popup, &outRect) != FALSE;
 }
 
+RECT TrackClientRect(const RECT& clientRect) {
+    RECT rc{};
+    rc.left = kPad;
+    rc.right = clientRect.right - kPad;
+    rc.top = kSliderTop;
+    rc.bottom = kSliderTop + kSliderHeight;
+    return rc;
+}
+
+RECT AutoRowClientRect(const RECT& clientRect) {
+    RECT rc{};
+    rc.left = kPad;
+    rc.right = clientRect.right - kPad;
+    rc.top = kAutoRowTop;
+    rc.bottom = kAutoRowTop + kAutoRowHeight;
+    return rc;
+}
+
 bool TrackScreenRect(RECT& outRect) {
     if (!g_popup) {
         return false;
     }
 
-    HWND track = GetDlgItem(g_popup, kTrackId);
-    if (!track) {
-        return false;
-    }
-
-    return GetWindowRect(track, &outRect) != FALSE;
-}
-
-bool AutoRowScreenRect(RECT& outRect) {
-    if (g_popup) {
-        HWND check = GetDlgItem(g_popup, kAutoCheckId);
-        if (check && GetWindowRect(check, &outRect)) {
-            return true;
-        }
-    }
-
-    RECT popupRect{};
-    if (!PopupScreenRect(popupRect)) {
-        return false;
-    }
-
-    outRect.left = popupRect.left;
-    outRect.right = popupRect.right;
-    outRect.top = popupRect.top + kAutoRowTop;
-    outRect.bottom = popupRect.top + kPopupHeight;
+    RECT clientRect{};
+    GetClientRect(g_popup, &clientRect);
+    outRect = TrackClientRect(clientRect);
+    MapWindowPoints(g_popup, nullptr, reinterpret_cast<LPPOINT>(&outRect), 2);
     return true;
 }
 
-int PercentFromTrackPoint(HWND track, int clientX) {
-    RECT rc{};
-    GetClientRect(track, &rc);
-    const int width = rc.right - rc.left;
+bool AutoRowScreenRect(RECT& outRect) {
+    if (!g_popup) {
+        return false;
+    }
+
+    RECT clientRect{};
+    GetClientRect(g_popup, &clientRect);
+    outRect = AutoRowClientRect(clientRect);
+    MapWindowPoints(g_popup, nullptr, reinterpret_cast<LPPOINT>(&outRect), 2);
+    return true;
+}
+
+int PercentFromTrackPoint(const RECT& trackRect, int clientX) {
+    const int width = trackRect.right - trackRect.left;
     if (width <= 0) {
         return 0;
     }
-    return ClampPercent((clientX * 100) / width);
+    const int localX = clientX - trackRect.left;
+    return ClampPercent((localX * 100) / width);
 }
 
 void ScheduleBrightnessApply(int percent) {
@@ -146,18 +236,9 @@ void FlushBrightnessApply() {
 }
 
 void SyncAutoCheckboxState() {
-    if (!g_popup) {
-        return;
+    if (g_popup) {
+        InvalidateRect(g_popup, nullptr, FALSE);
     }
-
-    HWND check = GetDlgItem(g_popup, kAutoCheckId);
-    if (!check) {
-        return;
-    }
-
-    const bool enabled = g_callbacks.isAutoEnabled && g_callbacks.isAutoEnabled();
-    SendMessageW(check, BM_SETCHECK, enabled ? BST_CHECKED : BST_UNCHECKED, 0);
-    RedrawWindow(check, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE);
 }
 
 int InitialPanelPercent() {
@@ -206,32 +287,12 @@ void DisableAutomaticIfEnabled() {
 }
 
 int CurrentTrackPercent() {
-    if (!g_popup) {
-        return 50;
-    }
-
-    HWND track = GetDlgItem(g_popup, kTrackId);
-    if (!track) {
-        return 50;
-    }
-
-    return static_cast<int>(SendMessageW(track, TBM_GETPOS, 0, 0));
+    return g_currentPercent;
 }
 
 void ApplyTrackPercent(int percent, bool scheduleApply) {
-    if (!g_popup) {
-        return;
-    }
-
-    HWND track = GetDlgItem(g_popup, kTrackId);
-    if (!track) {
-        return;
-    }
-
     percent = ClampPercent(percent);
-    g_updatingTrack = true;
-    SendMessageW(track, TBM_SETPOS, TRUE, percent);
-    g_updatingTrack = false;
+    g_currentPercent = percent;
     UpdateLabelText();
 
     if (scheduleApply) {
@@ -263,41 +324,128 @@ bool AdjustBrightnessByWheel(POINT screenPt, short wheelDelta) {
 }
 
 void UpdateLabelText() {
-    if (!g_popup) {
-        return;
+    if (g_popup) {
+        InvalidateRect(g_popup, nullptr, FALSE);
     }
-
-    HWND label = GetDlgItem(g_popup, kLabelId);
-    HWND track = GetDlgItem(g_popup, kTrackId);
-    if (!label || !track) {
-        return;
-    }
-
-    const int percent = static_cast<int>(SendMessageW(track, TBM_GETPOS, 0, 0));
-    wchar_t text[32];
-    _snwprintf(text, 32, L"Brightness: %d%%", percent);
-    SetWindowTextW(label, text);
 }
 
 void SetPercentFromScreenPoint(int screenX, int screenY, bool scheduleApply) {
     (void)screenY;
-    HWND track = GetDlgItem(g_popup, kTrackId);
-    if (!track) {
+    if (!g_popup) {
         return;
     }
 
+    RECT clientRect{};
+    GetClientRect(g_popup, &clientRect);
+    const RECT trackRect = TrackClientRect(clientRect);
     POINT pt{screenX, screenY};
-    ScreenToClient(track, &pt);
-    ApplyTrackPercent(PercentFromTrackPoint(track, pt.x), scheduleApply);
+    ScreenToClient(g_popup, &pt);
+    ApplyTrackPercent(PercentFromTrackPoint(trackRect, pt.x), scheduleApply);
 }
 
-void PaintAutoRowSeparator(HDC dc, const RECT& clientRect) {
-    HPEN separator = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_3DSHADOW));
-    HPEN previousPen = reinterpret_cast<HPEN>(SelectObject(dc, separator));
-    MoveToEx(dc, clientRect.left + 1, kAutoRowTop, nullptr);
-    LineTo(dc, clientRect.right - 1, kAutoRowTop);
+void FillRoundedRect(HDC dc, const RECT& rc, int radius, HBRUSH brush) {
+    HBRUSH previous = reinterpret_cast<HBRUSH>(SelectObject(dc, brush));
+    RoundRect(dc, rc.left, rc.top, rc.right, rc.bottom, radius, radius);
+    SelectObject(dc, previous);
+}
+
+void PaintPanel(HDC dc, const RECT& clientRect) {
+    EnsureThemeResources();
+
+    HBRUSH background = CreateSolidBrush(kBgBottom);
+    FillRect(dc, &clientRect, background);
+    DeleteObject(background);
+
+    HPEN borderPen = CreatePen(PS_SOLID, 1, kCardBorder);
+    HPEN previousPen = reinterpret_cast<HPEN>(SelectObject(dc, borderPen));
+    HBRUSH previousBrush = reinterpret_cast<HBRUSH>(SelectObject(dc, GetStockObject(NULL_BRUSH)));
+    Rectangle(dc, clientRect.left, clientRect.top, clientRect.right, clientRect.bottom);
+    SelectObject(dc, previousBrush);
+    SelectObject(dc, previousPen);
+    DeleteObject(borderPen);
+
+    SetBkMode(dc, TRANSPARENT);
+
+    HFONT previousFont = reinterpret_cast<HFONT>(SelectObject(dc, g_titleFont));
+    SetTextColor(dc, kAccent);
+    RECT titleRect{clientRect.left + kPad, clientRect.top + 10, clientRect.right - kPad, clientRect.top + 28};
+    DrawTextW(dc, L"SCREEN BRIGHTNESS", -1, &titleRect, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
+    SelectObject(dc, g_valueFont);
+    SetTextColor(dc, kText);
+    wchar_t valueText[16];
+    _snwprintf(valueText, 16, L"%d%%", g_currentPercent);
+    RECT valueRect{clientRect.right - 72, clientRect.top + 8, clientRect.right - kPad, clientRect.top + 32};
+    DrawTextW(dc, valueText, -1, &valueRect, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
+
+    const RECT trackRect = TrackClientRect(clientRect);
+    HBRUSH trackBg = CreateSolidBrush(kTrackBg);
+    FillRoundedRect(dc, trackRect, 10, trackBg);
+    DeleteObject(trackBg);
+
+    const int trackWidth = trackRect.right - trackRect.left;
+    const int fillWidth = (trackWidth * g_currentPercent) / 100;
+    if (fillWidth > 0) {
+        RECT fillRect = trackRect;
+        fillRect.right = fillRect.left + fillWidth;
+        HBRUSH fillBrush = CreateSolidBrush(kAccent);
+        FillRoundedRect(dc, fillRect, 10, fillBrush);
+        DeleteObject(fillBrush);
+    }
+
+    const int thumbX = trackRect.left + (trackWidth * g_currentPercent) / 100;
+    const int thumbY = (trackRect.top + trackRect.bottom) / 2;
+    HBRUSH thumbBrush = CreateSolidBrush(kAccent2);
+    HBRUSH previousThumbBrush = reinterpret_cast<HBRUSH>(SelectObject(dc, thumbBrush));
+    HPEN thumbPen = CreatePen(PS_SOLID, 1, kAccent2);
+    HPEN previousThumbPen = reinterpret_cast<HPEN>(SelectObject(dc, thumbPen));
+    Ellipse(dc, thumbX - 7, thumbY - 7, thumbX + 7, thumbY + 7);
+    SelectObject(dc, previousThumbPen);
+    SelectObject(dc, previousThumbBrush);
+    DeleteObject(thumbPen);
+    DeleteObject(thumbBrush);
+
+    HPEN separator = CreatePen(PS_SOLID, 1, kCardBorder);
+    previousPen = reinterpret_cast<HPEN>(SelectObject(dc, separator));
+    MoveToEx(dc, clientRect.left + kPad, kAutoRowTop, nullptr);
+    LineTo(dc, clientRect.right - kPad, kAutoRowTop);
     SelectObject(dc, previousPen);
     DeleteObject(separator);
+
+    const bool autoEnabled = g_callbacks.isAutoEnabled && g_callbacks.isAutoEnabled();
+    const RECT autoRow = AutoRowClientRect(clientRect);
+    const int boxSize = 16;
+    const int boxTop = autoRow.top + ((autoRow.bottom - autoRow.top - boxSize) / 2);
+    RECT boxRect{autoRow.left, boxTop, autoRow.left + boxSize, boxTop + boxSize};
+
+    HBRUSH boxFill = CreateSolidBrush(autoEnabled ? kAccent : kTrackBg);
+    FillRoundedRect(dc, boxRect, 4, boxFill);
+    DeleteObject(boxFill);
+
+    HPEN boxPen = CreatePen(PS_SOLID, 1, autoEnabled ? kAccent : kCardBorder);
+    previousPen = reinterpret_cast<HPEN>(SelectObject(dc, boxPen));
+    previousBrush = reinterpret_cast<HBRUSH>(SelectObject(dc, GetStockObject(NULL_BRUSH)));
+    RoundRect(dc, boxRect.left, boxRect.top, boxRect.right, boxRect.bottom, 4, 4);
+    SelectObject(dc, previousBrush);
+    SelectObject(dc, previousPen);
+    DeleteObject(boxPen);
+
+    if (autoEnabled) {
+        HPEN checkPen = CreatePen(PS_SOLID, 2, RGB(27, 18, 8));
+        previousPen = reinterpret_cast<HPEN>(SelectObject(dc, checkPen));
+        MoveToEx(dc, boxRect.left + 3, boxRect.top + 8, nullptr);
+        LineTo(dc, boxRect.left + 7, boxRect.bottom - 4);
+        LineTo(dc, boxRect.right - 2, boxRect.top + 4);
+        SelectObject(dc, previousPen);
+        DeleteObject(checkPen);
+    }
+
+    SelectObject(dc, g_bodyFont);
+    SetTextColor(dc, kText);
+    RECT labelRect{boxRect.right + 10, autoRow.top, autoRow.right, autoRow.bottom};
+    DrawTextW(dc, L"Automatic", -1, &labelRect, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
+    SelectObject(dc, previousFont);
 }
 
 enum class MouseHandleResult {
@@ -461,33 +609,27 @@ LRESULT CALLBACK BrightnessPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         HDC dc = BeginPaint(hwnd, &ps);
         RECT clientRect{};
         GetClientRect(hwnd, &clientRect);
-        PaintAutoRowSeparator(dc, clientRect);
+        PaintPanel(dc, clientRect);
         EndPaint(hwnd, &ps);
         return 0;
     }
 
-    case WM_COMMAND:
-        if (LOWORD(wParam) == kAutoCheckId && HIWORD(wParam) == BN_CLICKED) {
-            const bool checked = SendMessageW(GetDlgItem(hwnd, kAutoCheckId), BM_GETCHECK, 0, 0) == BST_CHECKED;
-            if (g_callbacks.setAutoEnabled) {
-                g_callbacks.setAutoEnabled(checked);
-            }
-            SyncBrightnessPanelAutoState();
-            return 0;
-        }
-        break;
-
     case WM_ERASEBKGND: {
         RECT rc{};
         GetClientRect(hwnd, &rc);
-        FillRect(reinterpret_cast<HDC>(wParam), &rc, GetSysColorBrush(COLOR_MENU));
+        PaintPanel(reinterpret_cast<HDC>(wParam), rc);
         return 1;
     }
 
     case WM_SETCURSOR:
-        if (reinterpret_cast<HWND>(wParam) == GetDlgItem(hwnd, kTrackId)) {
-            SetCursor(g_handCursor ? g_handCursor : LoadCursorW(nullptr, IDC_HAND));
-            return TRUE;
+        if (LOWORD(lParam) == HTCLIENT) {
+            POINT screenPt{};
+            GetCursorPos(&screenPt);
+            RECT trackRect{};
+            if (TrackScreenRect(trackRect) && PtInRect(&trackRect, screenPt) != FALSE) {
+                SetCursor(g_handCursor ? g_handCursor : LoadCursorW(nullptr, IDC_HAND));
+                return TRUE;
+            }
         }
         break;
 
@@ -499,20 +641,6 @@ LRESULT CALLBACK BrightnessPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         }
         break;
     }
-
-    case WM_HSCROLL:
-        if (reinterpret_cast<HWND>(lParam) == GetDlgItem(hwnd, kTrackId)) {
-            if (!g_updatingTrack) {
-                const int percent = static_cast<int>(SendMessageW(
-                    reinterpret_cast<HWND>(lParam),
-                    TBM_GETPOS,
-                    0,
-                    0));
-                ApplyTrackPercent(percent, true);
-            }
-            UpdateLabelText();
-        }
-        return 0;
 
     case WM_BRIGHTNESS_SYNC: {
         SyncAutoCheckboxState();
@@ -541,7 +669,8 @@ void EnsurePopupCreated() {
         wc.lpfnWndProc = BrightnessPopupProc;
         wc.hInstance = GetModuleHandleW(nullptr);
         wc.lpszClassName = kPopupClass;
-        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_MENU + 1);
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        wc.hbrBackground = nullptr;
         RegisterClassExW(&wc);
         g_classRegistered = true;
     }
@@ -559,52 +688,6 @@ void EnsurePopupCreated() {
         nullptr,
         GetModuleHandleW(nullptr),
         nullptr);
-    if (!g_popup) {
-        return;
-    }
-
-    CreateWindowExW(
-        0,
-        L"STATIC",
-        L"Brightness: 50%",
-        WS_CHILD | WS_VISIBLE,
-        12,
-        8,
-        kPopupWidth - 24,
-        18,
-        g_popup,
-        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kLabelId)),
-        GetModuleHandleW(nullptr),
-        nullptr);
-
-    CreateWindowExW(
-        0,
-        TRACKBAR_CLASSW,
-        L"",
-        WS_CHILD | WS_VISIBLE | TBS_NOTICKS,
-        12,
-        28,
-        kPopupWidth - 24,
-        22,
-        g_popup,
-        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kTrackId)),
-        GetModuleHandleW(nullptr),
-        nullptr);
-    SendMessageW(GetDlgItem(g_popup, kTrackId), TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
-
-    CreateWindowExW(
-        0,
-        L"BUTTON",
-        L"Automatic",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-        8,
-        kAutoRowTop + 2,
-        kPopupWidth - 16,
-        kAutoRowHeight - 4,
-        g_popup,
-        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kAutoCheckId)),
-        GetModuleHandleW(nullptr),
-        nullptr);
 }
 
 bool GetPlaceholderScreenRect(RECT& outRect) {
@@ -612,7 +695,6 @@ bool GetPlaceholderScreenRect(RECT& outRect) {
         return false;
     }
 
-    // uItem is the zero-based index, not the command ID.
     if (g_owner && GetMenuItemRect(g_owner, g_brightnessSubMenu, 0, &outRect)) {
         return true;
     }
@@ -634,17 +716,18 @@ bool ScreenRectFromDrawItem(const DRAWITEMSTRUCT* draw, RECT& outRect) {
     return GetPlaceholderScreenRect(outRect);
 }
 
+void PaintPlaceholderBackground(HDC dc, const RECT& rcItem) {
+    EnsureThemeResources();
+    PaintPanel(dc, rcItem);
+}
+
 }  // namespace
 
 void InitTrayBrightnessUi(HWND owner, const TrayBrightnessCallbacks& callbacks) {
     g_owner = owner;
     g_callbacks = callbacks;
     g_handCursor = LoadCursorW(nullptr, IDC_HAND);
-
-    INITCOMMONCONTROLSEX icc{};
-    icc.dwSize = sizeof(icc);
-    icc.dwICC = ICC_BAR_CLASSES;
-    InitCommonControlsEx(&icc);
+    EnsureThemeResources();
     EnsurePopupCreated();
 }
 
@@ -657,6 +740,7 @@ void ShutdownTrayBrightnessUi() {
     g_owner = nullptr;
     g_callbacks = {};
     g_handCursor = nullptr;
+    ReleaseThemeResources();
 }
 
 void OnTrayContextMenuOpening() {
@@ -723,6 +807,7 @@ void ShowBrightnessPanelAtRect(const RECT& itemRect) {
         g_dragging = false;
     }
     InstallInputHooks();
+    InvalidateRect(g_popup, nullptr, TRUE);
 }
 
 void ShowBrightnessPanel(HWND owner, HMENU brightnessSubMenu) {
@@ -773,7 +858,7 @@ void DrawBrightnessPlaceholderItem(const DRAWITEMSTRUCT* draw) {
         return;
     }
 
-    FillRect(draw->hDC, &draw->rcItem, GetSysColorBrush(COLOR_MENU));
+    PaintPlaceholderBackground(draw->hDC, draw->rcItem);
 
     RECT screenRect{};
     if (ScreenRectFromDrawItem(draw, screenRect)) {

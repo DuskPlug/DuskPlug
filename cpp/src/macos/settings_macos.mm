@@ -10,6 +10,8 @@
 
 #include <string>
 
+static NSWindow* gActiveSettingsWindow = nil;
+
 @interface DuskPlugSettingsHost : NSObject <WKScriptMessageHandler, NSWindowDelegate>
 @property(nonatomic, assign) AppConfig* config;
 @property(nonatomic, assign) const std::string* configPath;
@@ -95,6 +97,7 @@
 
 - (BOOL)windowShouldClose:(NSWindow*)sender {
     (void)sender;
+    gActiveSettingsWindow = nil;
     [NSApp stopModalWithCode:NSModalResponseCancel];
     return YES;
 }
@@ -103,6 +106,12 @@
 
 bool ShowMacSettingsDialog(const std::string& configPath, AppConfig& config) {
     @autoreleasepool {
+        if (gActiveSettingsWindow) {
+            [gActiveSettingsWindow makeKeyAndOrderFront:nil];
+            [NSApp activateIgnoringOtherApps:YES];
+            return false;
+        }
+
         const std::string html = LoadSettingsHtml();
         if (html.empty()) {
             NSAlert* alert = [[NSAlert alloc] init];
@@ -136,10 +145,12 @@ bool ShowMacSettingsDialog(const std::string& configPath, AppConfig& config) {
         window.delegate = host;
         window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
         host.window = window;
+        gActiveSettingsWindow = window;
         [window center];
         [window makeKeyAndOrderFront:nil];
 
         const NSModalResponse response = [NSApp runModalForWindow:window];
+        gActiveSettingsWindow = nil;
         [configuration.userContentController removeScriptMessageHandlerForName:@"duskplug"];
         return host.saved || response == NSModalResponseOK;
     }

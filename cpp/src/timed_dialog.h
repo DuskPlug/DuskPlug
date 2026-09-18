@@ -7,3 +7,6 @@
 #include <windows.h>
 
 bool PromptTimedMinutes(HWND owner, int& minutes);
+
+bool IsTimedDialogOpen();
+void FocusTimedDialog();

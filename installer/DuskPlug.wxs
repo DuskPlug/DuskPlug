@@ -92,6 +92,7 @@
       </Component>
       <Component>
         <File Source="..\assets\settings.html" />
+        <File Source="..\assets\timed.html" />
       </Component>
     </ComponentGroup>
 
