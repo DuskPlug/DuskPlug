@@ -49,54 +49,20 @@ bool RunCommand(const std::wstring& command) {
     return exitCode == 0;
 }
 
-bool CopyFileOverwrite(const std::string& from, const std::string& to) {
-    return CopyFileW(Utf8ToWide(from).c_str(), Utf8ToWide(to).c_str(), FALSE) != FALSE;
-}
-
-bool CopyDirectoryRecursive(const std::string& fromDir, const std::string& toDir) {
-    EnsureDirectoryExists(toDir);
-    const std::wstring search = Utf8ToWide(fromDir + "\\*");
-    WIN32_FIND_DATAW data{};
-    const HANDLE handle = FindFirstFileW(search.c_str(), &data);
-    if (handle == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-
-    bool ok = true;
-    do {
-        const std::wstring name = data.cFileName;
-        if (name == L"." || name == L"..") {
-            continue;
-        }
-        const std::string childFrom = fromDir + "\\" + WideToUtf8(name);
-        const std::string childTo = toDir + "\\" + WideToUtf8(name);
-        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            if (!CopyDirectoryRecursive(childFrom, childTo)) {
-                ok = false;
-            }
-        } else if (!CopyFileOverwrite(childFrom, childTo)) {
-            ok = false;
-        }
-    } while (FindNextFileW(handle, &data));
-
-    FindClose(handle);
-    return ok;
-}
-
-bool LaunchUpdatedExe(const std::string& exePath) {
+bool LaunchDetachedPowerShell(const std::wstring& arguments) {
     STARTUPINFOW si{};
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi{};
-    std::wstring command = L"\"" + Utf8ToWide(exePath) + L"\"";
+    std::wstring command = L"powershell.exe " + arguments;
     if (!CreateProcessW(
             nullptr,
             command.data(),
             nullptr,
             nullptr,
             FALSE,
-            0,
+            CREATE_NO_WINDOW,
             nullptr,
-            Utf8ToWide(GetExeDirectory()).c_str(),
+            nullptr,
             &si,
             &pi)) {
         return false;
@@ -131,6 +97,35 @@ bool WriteMsiRestartHelperScript(const std::string& scriptPath) {
         "if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq 1641) {\r\n"
         "  Start-Process -FilePath $ExePath\r\n"
         "}\r\n";
+
+    return WriteTextFile(scriptPath, script);
+}
+
+bool WritePortableRestartHelperScript(const std::string& scriptPath) {
+    const std::string script =
+        "param(\r\n"
+        "  [Parameter(Mandatory=$true)][int] $ParentPid,\r\n"
+        "  [Parameter(Mandatory=$true)][string] $StagingDir,\r\n"
+        "  [Parameter(Mandatory=$true)][string] $AppDir,\r\n"
+        "  [Parameter(Mandatory=$true)][string] $ExePath\r\n"
+        ")\r\n"
+        "while (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {\r\n"
+        "  Start-Sleep -Milliseconds 300\r\n"
+        "}\r\n"
+        "$exe = Join-Path $StagingDir 'DuskPlug.exe'\r\n"
+        "if (-not (Test-Path -LiteralPath $exe)) { exit 1 }\r\n"
+        "Copy-Item -LiteralPath $exe -Destination (Join-Path $AppDir 'DuskPlug.exe') -Force\r\n"
+        "$loader = Join-Path $StagingDir 'WebView2Loader.dll'\r\n"
+        "if (Test-Path -LiteralPath $loader) {\r\n"
+        "  Copy-Item -LiteralPath $loader -Destination (Join-Path $AppDir 'WebView2Loader.dll') -Force\r\n"
+        "}\r\n"
+        "$assets = Join-Path $StagingDir 'assets'\r\n"
+        "$targetAssets = Join-Path $AppDir 'assets'\r\n"
+        "if (Test-Path -LiteralPath $assets) {\r\n"
+        "  New-Item -ItemType Directory -Force -Path $targetAssets | Out-Null\r\n"
+        "  Copy-Item -LiteralPath (Join-Path $assets '*') -Destination $targetAssets -Recurse -Force\r\n"
+        "}\r\n"
+        "Start-Process -FilePath $ExePath\r\n";
 
     return WriteTextFile(scriptPath, script);
 }
@@ -198,30 +193,33 @@ ApplyUpdateResult ApplyPortableUpdate(const UpdateInfo& info) {
         return result;
     }
 
-    const std::string updatedExe = stagingDir + "\\DuskPlug.exe";
-    const std::string updatedLoader = stagingDir + "\\WebView2Loader.dll";
-    const std::string updatedAssets = stagingDir + "\\assets";
-    if (!FileExists(updatedExe)) {
+    if (!FileExists(stagingDir + "\\DuskPlug.exe")) {
         result.error = "Update archive did not contain DuskPlug.exe.";
         return result;
     }
 
+    const std::string scriptPath = tempDir + "\\DuskPlug-apply-portable-update.ps1";
     const std::string targetExe = appDir + "\\DuskPlug.exe";
-    if (!CopyFileOverwrite(updatedExe, targetExe)) {
-        result.error = "Could not replace DuskPlug.exe.";
-        return result;
-    }
-    if (FileExists(updatedLoader) && !CopyFileOverwrite(updatedLoader, appDir + "\\WebView2Loader.dll")) {
-        result.error = "Could not update WebView2Loader.dll.";
-        return result;
-    }
-    if (FileExists(updatedAssets) && !CopyDirectoryRecursive(updatedAssets, appDir + "\\assets")) {
-        result.error = "Could not update assets folder.";
+    if (!WritePortableRestartHelperScript(scriptPath)) {
+        result.error = "Could not prepare update restart helper.";
         return result;
     }
 
-    if (!LaunchUpdatedExe(targetExe)) {
-        result.error = "Update installed but restart failed.";
+    const std::wstring arguments =
+        L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \""
+        + Utf8ToWide(scriptPath)
+        + L"\" -ParentPid "
+        + std::to_wstring(GetCurrentProcessId())
+        + L" -StagingDir \""
+        + Utf8ToWide(stagingDir)
+        + L"\" -AppDir \""
+        + Utf8ToWide(appDir)
+        + L"\" -ExePath \""
+        + Utf8ToWide(targetExe)
+        + L"\"";
+
+    if (!LaunchDetachedPowerShell(arguments)) {
+        result.error = "Could not start update restart helper.";
         return result;
     }
 
