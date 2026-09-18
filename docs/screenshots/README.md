@@ -15,4 +15,13 @@ Do not overwrite these from `scripts/capture_readme_screenshots.py`, `make_tray_
 
 ## Settings
 
-`settings-dialog.png` may be captured live via `scripts/capture_readme_screenshots.py` when DuskPlug and WebView2 are available.
+`settings-dialog.png` is a **real Windows capture** of the WebView2 Settings dialog.
+
+- **Source:** `source/settings-dialog.png`
+- **Capture:** with DuskPlug running, run:
+
+  ```powershell
+  python scripts/capture_settings_screenshot.py
+  ```
+
+  This injects the logo into `assets/settings.html` for the capture, then restores the file.
