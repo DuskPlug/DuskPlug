@@ -484,7 +484,8 @@ int SmartModeController::ComputeScreenBrightnessTarget() const {
             now.month,
             now.day,
             now.hour,
-            now.minute);
+            now.minute,
+            GetCurrentUtcOffsetMinutes());
         const double factor = WindowSunExposure(
             sun.azimuthDegrees,
             sun.elevationDegrees,

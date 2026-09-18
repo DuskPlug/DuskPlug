@@ -98,6 +98,17 @@ int NormalizeMinutes(double minutes) {
 
 }  // namespace
 
+int GetCurrentUtcOffsetMinutes() {
+    const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm local{};
+#ifdef _WIN32
+    localtime_s(&local, &now);
+#else
+    localtime_r(&now, &local);
+#endif
+    return GetLocalUtcOffsetMinutes(local);
+}
+
 SolarTimes ComputeSolarTimes(
     double latitude,
     double longitude,
@@ -196,8 +207,20 @@ SunPosition ComputeSunPosition(
     int month,
     int day,
     int hour,
-    int minute) {
+    int minute,
+    int utcOffsetMinutes) {
     SunPosition result{};
+
+    int civilMinutes = hour * 60 + minute;
+    int utcMinutes = civilMinutes - utcOffsetMinutes;
+    while (utcMinutes < 0) {
+        utcMinutes += 24 * 60;
+    }
+    while (utcMinutes >= 24 * 60) {
+        utcMinutes -= 24 * 60;
+    }
+    hour = utcMinutes / 60;
+    minute = utcMinutes % 60;
 
     const int doy = DayOfYear(year, month, day);
     const double latRad = Rad(latitude);
@@ -256,9 +279,14 @@ double WindowSunExposure(
         angleDiff = 360.0 - angleDiff;
     }
 
-    const double elevationFactor = std::sin(Rad(std::clamp(sunElevation, 0.0, 90.0)));
-    const double directAlignment = std::max(0.0, std::cos(Rad(angleDiff)));
-    const double directComponent = directAlignment * elevationFactor * glareWeight;
-    const double ambientComponent = elevationFactor * (1.0 - glareWeight);
-    return std::clamp(directComponent + ambientComponent, 0.0, 1.0);
+    // cos(0)=1 when the sun shines into the window; cos(180)=-1 when it is behind.
+    const double cosDiff = std::cos(Rad(angleDiff));
+    const double intoWindow = (cosDiff + 1.0) * 0.5;
+
+    // Fade only when the sun is barely above the horizon.
+    constexpr double kMinElevationForFullExposure = 5.0;
+    const double lowSunFade = std::clamp(sunElevation / kMinElevationForFullExposure, 0.0, 1.0);
+
+    (void)glareWeight;
+    return std::clamp(intoWindow * lowSunFade, 0.0, 1.0);
 }

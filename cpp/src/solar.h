@@ -35,6 +35,8 @@ bool IsDarkWithOffsets(
     int lightOffsetMinutes,
     SolarTimes* outTimes = nullptr);
 
+int GetCurrentUtcOffsetMinutes();
+
 SunPosition ComputeSunPosition(
     double latitude,
     double longitude,
@@ -42,7 +44,8 @@ SunPosition ComputeSunPosition(
     int month,
     int day,
     int hour,
-    int minute);
+    int minute,
+    int utcOffsetMinutes = 0);
 
 double WindowSunExposure(
     double sunAzimuth,

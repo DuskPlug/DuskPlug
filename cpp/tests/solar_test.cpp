@@ -17,19 +17,30 @@ TEST(SolarWinterDayShorterThanSummer) {
 }
 
 TEST(EastWindowMorningExposureHigherThanMidday) {
-    const SunPosition morning = ComputeSunPosition(51.5, -0.1, 2026, 6, 21, 8, 0);
-    const SunPosition midday = ComputeSunPosition(51.5, -0.1, 2026, 6, 21, 12, 0);
+    const SunPosition morning = ComputeSunPosition(51.5, -0.1, 2026, 6, 21, 8, 0, 60);
+    const SunPosition midday = ComputeSunPosition(51.5, -0.1, 2026, 6, 21, 12, 0, 60);
     const double morningExposure = WindowSunExposure(morning.azimuthDegrees, morning.elevationDegrees, 90.0);
     const double middayExposure = WindowSunExposure(midday.azimuthDegrees, midday.elevationDegrees, 90.0);
     EXPECT_TRUE(morningExposure > middayExposure);
 }
 
-TEST(WinterMiddayLowerExposureThanSummer) {
-    const SunPosition winter = ComputeSunPosition(51.5, -0.1, 2026, 1, 15, 12, 0);
-    const SunPosition summer = ComputeSunPosition(51.5, -0.1, 2026, 6, 21, 12, 0);
-    const double winterExposure = WindowSunExposure(winter.azimuthDegrees, winter.elevationDegrees, 90.0);
-    const double summerExposure = WindowSunExposure(summer.azimuthDegrees, summer.elevationDegrees, 90.0);
-    EXPECT_TRUE(summerExposure > winterExposure);
+TEST(SunBehindWindowLowerExposureThanIntoWindow) {
+    const SunPosition morning = ComputeSunPosition(51.5, -0.1, 2026, 9, 18, 9, 50, 60);
+    const SunPosition evening = ComputeSunPosition(51.5, -0.1, 2026, 9, 18, 18, 0, 60);
+    const double intoWindow = WindowSunExposure(morning.azimuthDegrees, morning.elevationDegrees, 90.0);
+    const double behindWindow = WindowSunExposure(evening.azimuthDegrees, evening.elevationDegrees, 90.0);
+    EXPECT_TRUE(intoWindow > behindWindow);
+}
+
+TEST(EastWindowMorningNearDayBrightness) {
+    constexpr double kCardiffLat = 51.4816;
+    constexpr double kCardiffLng = -3.1791;
+    const SunPosition morning = ComputeSunPosition(kCardiffLat, kCardiffLng, 2026, 9, 18, 9, 50, 60);
+    const double exposure = WindowSunExposure(
+        morning.azimuthDegrees,
+        morning.elevationDegrees,
+        90.0);
+    EXPECT_TRUE(exposure > 0.85);
 }
 
 TEST(NightExposureNearZero) {
@@ -60,7 +71,8 @@ void RunSolarTests() {
     RUN_TEST(ComputeSolarTimesReasonable);
     RUN_TEST(SolarWinterDayShorterThanSummer);
     RUN_TEST(EastWindowMorningExposureHigherThanMidday);
-    RUN_TEST(WinterMiddayLowerExposureThanSummer);
+    RUN_TEST(SunBehindWindowLowerExposureThanIntoWindow);
+    RUN_TEST(EastWindowMorningNearDayBrightness);
     RUN_TEST(NightExposureNearZero);
     RUN_TEST(CardiffSunsetSeptemberWithBstOffset);
     RUN_TEST(CardiffSunsetJanuaryWithoutDstOffset);
