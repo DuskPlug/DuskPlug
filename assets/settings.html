@@ -27,7 +27,33 @@
     .brand h1 { margin: 0; font-size: 18px; font-weight: 650; }
     .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
     .version { margin-left: auto; color: var(--muted); font-size: 12px; padding: 4px 9px; border: 1px solid var(--card-border); border-radius: 999px; }
-    main { flex: 1; overflow: auto; padding: 8px 28px 20px; }
+    .tabs {
+      display: flex;
+      gap: 2px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--card-border);
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .tab {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 650;
+      padding: 11px 14px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    main { flex: 1; overflow: auto; padding: 16px 28px 20px; }
     .card { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 14px; }
     .card h2 { margin: 0 0 4px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
     .hint { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
@@ -98,37 +124,50 @@
     <div class="version" id="version"></div>
   </header>
 
+  <nav class="tabs" role="tablist" aria-label="Settings sections">
+    <button type="button" class="tab active" data-tab="connection" role="tab" aria-selected="true" aria-controls="tab-connection">Connection</button>
+    <button type="button" class="tab" data-tab="devices" role="tab" aria-selected="false" aria-controls="tab-devices">Devices</button>
+    <button type="button" class="tab" data-tab="location" role="tab" aria-selected="false" aria-controls="tab-location">Location</button>
+    <button type="button" class="tab" data-tab="screen" role="tab" aria-selected="false" aria-controls="tab-screen">Screen</button>
+    <button type="button" class="tab" data-tab="general" role="tab" aria-selected="false" aria-controls="tab-general">General</button>
+  </nav>
+
   <main>
-    <section class="card" id="connectionCard">
-      <h2>Tuya connection</h2>
-      <p class="hint">From your Tuya cloud project Overview. The data center must match the project.</p>
-      <div class="grid">
-        <label>Access ID<input id="clientId" autocomplete="off"></label>
-        <label>Access Secret
-          <div class="secret-wrap">
-            <input id="clientSecret" type="password" autocomplete="off">
-            <button type="button" class="toggle-secret" id="toggleSecret">Show</button>
-          </div>
-        </label>
-        <label>Data center<select id="dataCenter"></select></label>
-      </div>
-    </section>
+    <div class="tab-panel active" id="tab-connection" role="tabpanel">
+      <section class="card" id="connectionCard">
+        <h2>Tuya connection</h2>
+        <p class="hint">From your Tuya cloud project Overview. The data center must match the project.</p>
+        <div class="grid">
+          <label>Access ID<input id="clientId" autocomplete="off"></label>
+          <label>Access Secret
+            <div class="secret-wrap">
+              <input id="clientSecret" type="password" autocomplete="off">
+              <button type="button" class="toggle-secret" id="toggleSecret">Show</button>
+            </div>
+          </label>
+          <label>Data center<select id="dataCenter"></select></label>
+        </div>
+      </section>
+    </div>
 
-    <section class="card hidden" id="multiListCard">
-      <h2>Devices</h2>
-      <p class="hint">Each device has its own automation mode, schedule, and brightness settings.</p>
-      <div id="deviceList"></div>
-      <div class="row" style="margin-top:10px">
-        <label style="flex:2">Add device ID<input id="newDeviceId" placeholder="20-character device ID"></label>
-        <button type="button" class="btn" id="discoverDevice">Add device</button>
-      </div>
-    </section>
+    <div class="tab-panel" id="tab-devices" role="tabpanel">
+      <section class="card hidden" id="multiListCard">
+        <h2>Devices</h2>
+        <p class="hint">Each device has its own automation mode, schedule, and brightness settings.</p>
+        <div id="deviceList"></div>
+        <div class="row" style="margin-top:10px">
+          <label style="flex:2">Add device ID<input id="newDeviceId" placeholder="20-character device ID"></label>
+          <button type="button" class="btn" id="discoverDevice">Add device</button>
+        </div>
+      </section>
 
-    <section class="card hidden" id="singleDeviceCard"></section>
-    <section class="card hidden" id="deviceDetailCard"></section>
+      <section class="card hidden" id="singleDeviceCard"></section>
+      <section class="card hidden" id="deviceDetailCard"></section>
+    </div>
 
-    <section class="card">
-      <h2>Home location</h2>
+    <div class="tab-panel" id="tab-location" role="tabpanel">
+      <section class="card">
+        <h2>Home location</h2>
       <p class="hint location-help" id="locationHint">Used for Smart Mode sunset/sunrise timing and automatic screen brightness.</p>
       <div class="location-panel">
         <div class="location-coords">
@@ -154,10 +193,12 @@
           <p class="hint location-paste-hint">Right-click a spot on Google Maps and choose the coordinates, then paste them here.</p>
         </div>
       </div>
-    </section>
+      </section>
+    </div>
 
-    <section class="card">
-      <h2>Screen brightness</h2>
+    <div class="tab-panel" id="tab-screen" role="tabpanel">
+      <section class="card">
+        <h2>Screen brightness</h2>
       <p class="hint">These settings control your local monitor backlight. They do nothing until you turn on <strong>Screen brightness → Automatic</strong> from the tray menu (right-click the DuskPlug icon).</p>
 
       <div class="subsection">
@@ -205,13 +246,16 @@
           </div>
         </div>
       </div>
-    </section>
+      </section>
+    </div>
 
-    <section class="card">
-      <h2>Lock-off</h2>
-      <p class="hint">When any device is in Smart or Schedule mode, turn it off after the computer is locked or sleeping.</p>
-      <label>Delay (seconds)<input id="lockOff" type="number" min="0"></label>
-    </section>
+    <div class="tab-panel" id="tab-general" role="tabpanel">
+      <section class="card">
+        <h2>Lock-off</h2>
+        <p class="hint">When any device is in Smart or Schedule mode, turn it off after the computer is locked or sleeping.</p>
+        <label>Delay (seconds)<input id="lockOff" type="number" min="0"></label>
+      </section>
+    </div>
   </main>
 
   <footer>
@@ -224,6 +268,7 @@
 
   <script>
     const BOOT = /*__DUSKPLUG_BOOT__*/null;
+    const INITIAL_TAB = /*__DUSKPLUG_INITIAL_TAB__*/null;
     let devices = [];
     let detailIndex = -1;
 
@@ -354,6 +399,34 @@
       if (modeSelect) modeSelect.addEventListener("change", () => { readEditor(container, index); renderViews(); });
     }
 
+    function activeTabId() {
+      const active = document.querySelector(".tab.active");
+      return active ? active.getAttribute("data-tab") : "connection";
+    }
+
+    function persistDeviceEditor() {
+      if (devices.length <= 1 && !$("singleDeviceCard").classList.contains("hidden")) {
+        readEditor($("singleDeviceCard"), 0);
+      } else if (detailIndex >= 0 && !$("deviceDetailCard").classList.contains("hidden")) {
+        readEditor($("deviceDetailCard"), detailIndex);
+      }
+    }
+
+    function switchTab(tabId) {
+      if (!tabId) return;
+      if (activeTabId() === "devices" && tabId !== "devices") persistDeviceEditor();
+      document.querySelectorAll(".tab").forEach(tab => {
+        const on = tab.getAttribute("data-tab") === tabId;
+        tab.classList.toggle("active", on);
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      document.querySelectorAll(".tab-panel").forEach(panel => {
+        panel.classList.toggle("active", panel.id === "tab-" + tabId);
+      });
+      if (tabId === "screen") refreshBrightnessPreview();
+      if (tabId === "location") refreshLocationMap();
+    }
+
     function renderViews() {
       const single = devices.length <= 1;
       $("multiListCard").classList.toggle("hidden", single);
@@ -368,6 +441,7 @@
         $("pageTitle").textContent = devices[detailIndex].name || "Device settings";
         $("deviceDetailCard").innerHTML = deviceEditorHtml(devices[detailIndex], "detail");
         bindEditor($("deviceDetailCard"), detailIndex, "detail");
+        switchTab("devices");
       } else {
         $("pageTitle").textContent = "DuskPlug Settings";
         $("pageSubtitle").textContent = devices.length + " devices configured";
@@ -743,6 +817,10 @@
     $("save").onclick = () => { showToast("Saving…"); postNative(collectPayload()); };
     $("cancel").onclick = () => postNative({ type: "cancel" });
     document.addEventListener("keydown", e => { if (e.key === "Escape") postNative({ type: "cancel" }); });
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => switchTab(tab.getAttribute("data-tab")));
+    });
+    window.duskplugSwitchTab = switchTab;
 
     function boot(data) {
       if (!data) return;
@@ -755,6 +833,14 @@
       devices = (data.config && data.config.devices && data.config.devices.length) ? data.config.devices.slice() : [defaultDevice()];
       fillShared(data.config || {}, data.dataCenters || []);
       renderViews();
+      const initialTab = (data && data.initialTab) || INITIAL_TAB;
+      if (initialTab) {
+        switchTab(initialTab);
+      } else if (detailIndex >= 0 || devices.length <= 1) {
+        switchTab("devices");
+      } else {
+        switchTab("connection");
+      }
     }
 
     boot(BOOT);

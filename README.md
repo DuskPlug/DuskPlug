@@ -12,9 +12,15 @@ Free, open source, and MIT-licensed. You only need your own free Tuya cloud proj
 
 ![DuskPlug tray menu with Smart Mode and screen brightness](docs/screenshots/tray-menu.png)
 
-**Settings**:
+**Settings** (tabbed — Connection, Devices, Location, Screen, General):
 
-![Settings dialog](docs/screenshots/settings-dialog.png)
+| Connection | Devices | Location |
+|:---:|:---:|:---:|
+| ![Settings — Connection](docs/screenshots/settings-connection.png) | ![Settings — Devices](docs/screenshots/settings-devices.png) | ![Settings — Location](docs/screenshots/settings-location.png) |
+
+| Screen | General |
+|:---:|:---:|
+| ![Settings — Screen](docs/screenshots/settings-screen.png) | ![Settings — General](docs/screenshots/settings-general.png) |
 
 ## Why DuskPlug?
 

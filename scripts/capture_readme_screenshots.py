@@ -324,11 +324,17 @@ def render_settings_mockup() -> Image.Image:
     return img
 
 
-def capture_settings_dialog() -> bool:
+def capture_settings_dialog(out: Path | None = None, *, close_after: bool = True) -> bool:
     """Capture the WebView2 settings window from a running DuskPlug instance."""
+    target = out or (OUT / "settings-dialog.png")
     main_hwnd = find_window("DuskPlugWindow")
     if not main_hwnd:
-        subprocess.Popen([str(ROOT / "DuskPlug.exe")], cwd=str(ROOT))
+        for exe in (ROOT / "DuskPlug.exe", Path(r"C:\Program Files\DuskPlug\DuskPlug.exe")):
+            if exe.is_file():
+                subprocess.Popen([str(exe)], cwd=str(exe.parent))
+                break
+        else:
+            subprocess.Popen([str(ROOT / "DuskPlug.exe")], cwd=str(ROOT))
         main_hwnd = wait_window("DuskPlugWindow", timeout=20)
     if not main_hwnd:
         return False
@@ -342,8 +348,9 @@ def capture_settings_dialog() -> bool:
 
     user32.SetForegroundWindow(settings)
     time.sleep(2.5)
-    save_window(settings, OUT / "settings-dialog.png")
-    user32.PostMessageW(settings, WM_CLOSE, 0, 0)
+    save_window(settings, target)
+    if close_after:
+        user32.PostMessageW(settings, WM_CLOSE, 0, 0)
     return True
 
 
