@@ -11,12 +11,14 @@ struct SettingsWebResult {
         Cancel,
         DetectLocation,
         OpenLocationSettings,
+        OpenUrl,
         SetLocation,
         RunScript
     };
 
     Kind kind = Kind::None;
     std::string script;
+    std::string url;
     double latitude = 0.0;
     double longitude = 0.0;
 };

@@ -104,6 +104,8 @@
     .location-status.set { border-color: rgba(125, 207, 182, 0.35); background: rgba(125, 207, 182, 0.08); }
     .location-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .location-paste { padding-top: 14px; border-top: 1px solid var(--card-border); }
+    .maps-link { color: var(--accent-2); text-decoration: none; font: inherit; font-weight: 600; cursor: pointer; align-self: flex-start; }
+    .maps-link:hover { text-decoration: underline; }
     .paste-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin-top: 6px; }
     .location-paste-hint { margin: 8px 0 0; }
     .location-help { margin: 0; }
@@ -182,13 +184,14 @@
           <button type="button" class="btn ghost hidden" id="openLocationSettings">Open system location settings</button>
         </div>
         <div class="location-paste">
-          <label>Paste from Google Maps
+          <label>
+            <a class="maps-link" id="openGoogleMaps" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">Paste from Google Maps</a>
             <div class="paste-row">
               <input id="pasteCoords" placeholder="51.4809, -3.2092">
               <button type="button" class="btn" id="applyCoords">Apply</button>
             </div>
           </label>
-          <p class="hint location-paste-hint">Right-click a spot on Google Maps and choose the coordinates, then paste them here.</p>
+          <p class="hint location-paste-hint">Opens Google Maps in your browser. Right-click a spot, copy the coordinates, then paste them here.</p>
         </div>
       </div>
       </section>
@@ -538,6 +541,32 @@
       return "https://maps.google.com/maps?q=" + encodeURIComponent(lat + "," + lng) + "&z=14&output=embed";
     }
 
+    function googleMapsBrowseUrl() {
+      const lat = Number($("latitude").value);
+      const lng = Number($("longitude").value);
+      if (hasValidLocation(lat, lng)) {
+        return "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lng);
+      }
+      return "https://www.google.com/maps";
+    }
+
+    function syncGoogleMapsLink() {
+      const link = $("openGoogleMaps");
+      if (link) link.setAttribute("href", googleMapsBrowseUrl());
+    }
+
+    function openGoogleMaps(event) {
+      if (event) event.preventDefault();
+      const url = googleMapsBrowseUrl();
+      syncGoogleMapsLink();
+      if ((window.chrome && window.chrome.webview)
+          || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.duskplug)) {
+        postNative({ type: "openUrl", url: url });
+        return;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
     function refreshLocationMap() {
       const wrap = $("locationMapWrap");
       const frame = $("locationMap");
@@ -577,6 +606,7 @@
         status.textContent = "No location set yet. Detect your location or paste coordinates from Google Maps.";
       }
       scheduleLocationMapRefresh();
+      syncGoogleMapsLink();
     }
 
     const PREVIEW = (() => {
@@ -805,6 +835,7 @@
     $("discoverDevice").onclick = () => { const id = $("newDeviceId").value.trim(); if (!id) return showToast("Enter a device ID.", "error"); showToast("Discovering device…"); postNative({ type: "discoverDevice", deviceId: id }); };
     $("detectLocation").onclick = () => { showToast("Detecting location…"); postNative({ type: "detectLocation" }); };
     $("openLocationSettings").onclick = () => postNative({ type: "openLocationSettings" });
+    $("openGoogleMaps").onclick = openGoogleMaps;
     $("applyCoords").onclick = () => {
       postNative({ type: "parseCoords", text: $("pasteCoords").value, reportError: true });
       setTimeout(() => {

@@ -208,6 +208,11 @@ void SettingsHost::HandleMessage(const std::string& message) {
     case SettingsWebResult::Kind::OpenLocationSettings:
         OpenWindowsLocationSettings();
         break;
+    case SettingsWebResult::Kind::OpenUrl:
+        if (!result.url.empty()) {
+            ShellExecuteW(hwnd, L"open", Utf8ToWide(result.url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        }
+        break;
     case SettingsWebResult::Kind::SetLocation:
         Eval(JsCallSetLocation(result.latitude, result.longitude));
         break;

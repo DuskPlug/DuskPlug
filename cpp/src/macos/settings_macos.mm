@@ -64,6 +64,15 @@ static NSWindow* gActiveSettingsWindow = nil;
     case SettingsWebResult::Kind::OpenLocationSettings:
         OpenMacLocationSettings();
         break;
+    case SettingsWebResult::Kind::OpenUrl:
+        if (!result.url.empty()) {
+            NSString* urlText = [NSString stringWithUTF8String:result.url.c_str()];
+            NSURL* url = urlText ? [NSURL URLWithString:urlText] : nil;
+            if (url) {
+                [[NSWorkspace sharedWorkspace] openURL:url];
+            }
+        }
+        break;
     case SettingsWebResult::Kind::SetLocation:
         [self evalScript:JsCallSetLocation(result.latitude, result.longitude)];
         break;

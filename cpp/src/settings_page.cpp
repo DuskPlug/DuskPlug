@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,31 @@ std::string FindAssetPath(const char* filename) {
 
 std::string FindSettingsHtmlPath() {
     return FindAssetPath("settings.html");
+}
+
+bool UrlHasAllowedHostPrefix(const std::string& url, const char* prefix) {
+    const size_t n = std::strlen(prefix);
+    if (url.size() < n || url.compare(0, n, prefix) != 0) {
+        return false;
+    }
+    if (url.size() == n) {
+        return true;
+    }
+    const char next = url[n];
+    return next == '/' || next == '?' || next == '#';
+}
+
+bool IsAllowedGoogleMapsUrl(const std::string& url) {
+    if (url.empty() || url.size() > 512) {
+        return false;
+    }
+    for (unsigned char ch : url) {
+        if (ch < 32 || ch == ' ' || ch == '\\' || ch == '"' || ch == '<' || ch == '>') {
+            return false;
+        }
+    }
+    return UrlHasAllowedHostPrefix(url, "https://www.google.com/maps")
+        || UrlHasAllowedHostPrefix(url, "https://maps.google.com");
 }
 
 std::string NormalizeScheduleTime(const std::string& text) {
@@ -439,6 +465,18 @@ SettingsWebResult HandleSettingsWebMessage(
 
     if (*type == "openLocationSettings") {
         result.kind = SettingsWebResult::Kind::OpenLocationSettings;
+        return result;
+    }
+
+    if (*type == "openUrl") {
+        const auto url = JsonGetString(message, "url");
+        if (!url || !IsAllowedGoogleMapsUrl(*url)) {
+            result.kind = SettingsWebResult::Kind::RunScript;
+            result.script = JsCallShowError("Could not open that link.", false);
+            return result;
+        }
+        result.kind = SettingsWebResult::Kind::OpenUrl;
+        result.url = *url;
         return result;
     }
 

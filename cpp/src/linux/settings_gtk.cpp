@@ -76,6 +76,11 @@ void ApplyResult(SettingsHost* host, const SettingsWebResult& result) {
     case SettingsWebResult::Kind::OpenLocationSettings:
         OpenLinuxLocationSettings();
         break;
+    case SettingsWebResult::Kind::OpenUrl:
+        if (!result.url.empty()) {
+            gtk_show_uri_on_window(GTK_WINDOW(host->dialog), result.url.c_str(), GDK_CURRENT_TIME, nullptr);
+        }
+        break;
     case SettingsWebResult::Kind::SetLocation:
         EvalScript(host, JsCallSetLocation(result.latitude, result.longitude));
         break;

@@ -134,6 +134,26 @@ TEST(HandleSettingsWebMessageParseCoords) {
     EXPECT_TRUE(result.latitude > 51.0 && result.latitude < 52.0);
 }
 
+TEST(HandleSettingsWebMessageOpenGoogleMapsUrl) {
+    AppConfig config{};
+    const auto result = HandleSettingsWebMessage(
+        R"({"type":"openUrl","url":"https://www.google.com/maps?q=51.4809,-3.2092"})",
+        "unused.json",
+        config);
+    EXPECT_TRUE(result.kind == SettingsWebResult::Kind::OpenUrl);
+    EXPECT_EQ(result.url, "https://www.google.com/maps?q=51.4809,-3.2092");
+}
+
+TEST(HandleSettingsWebMessageRejectsUnsafeUrl) {
+    AppConfig config{};
+    const auto result = HandleSettingsWebMessage(
+        R"({"type":"openUrl","url":"https://example.com"})",
+        "unused.json",
+        config);
+    EXPECT_TRUE(result.kind == SettingsWebResult::Kind::RunScript);
+    EXPECT_TRUE(result.url.empty());
+}
+
 void RunSettingsPageTests() {
     std::printf("settings page tests\n");
     RUN_TEST(JsonEscapeQuotesAndTags);
@@ -145,4 +165,6 @@ void RunSettingsPageTests() {
     RUN_TEST(ApplySettingsFromJsonAcceptsValidPayload);
     RUN_TEST(ApplySettingsFromJsonRejectsSameScheduleTimes);
     RUN_TEST(HandleSettingsWebMessageParseCoords);
+    RUN_TEST(HandleSettingsWebMessageOpenGoogleMapsUrl);
+    RUN_TEST(HandleSettingsWebMessageRejectsUnsafeUrl);
 }
