@@ -10,7 +10,7 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install MinGW
         run: winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e --accept-source-agreements --accept-package-agreements
@@ -19,9 +19,9 @@ jobs:
         run: cpp/test.cmd
 
   test-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
@@ -37,7 +37,7 @@ jobs:
   test-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build and test
         run: |
@@ -53,7 +53,7 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install MinGW
         run: winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e --accept-source-agreements --accept-package-agreements
@@ -75,7 +75,7 @@ jobs:
       - name: Upload unsigned binaries for SignPath
         if: steps.signpath_config.outputs.enabled == 'true'
         id: upload_unsigned
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: duskplug-unsigned
           path: |
@@ -111,14 +111,14 @@ jobs:
           Compress-Archive -Path "$staging\*" -DestinationPath DuskPlug-Windows.zip
 
       - name: Upload release asset
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             DuskPlug-Windows.zip
             DuskPlug.msi
 
       - name: Upload Windows artifacts for manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-windows
           path: |
@@ -133,16 +133,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build Linux tarball
         run: bash scripts/build-linux.sh
       - name: Upload Linux release asset
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: DuskPlug-Linux-x64.tar.gz
 
       - name: Upload Linux artifact for manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-linux
           path: DuskPlug-Linux-x64.tar.gz
@@ -155,16 +155,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build macOS zip
         run: bash scripts/build-macos.sh
       - name: Upload macOS release asset
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: DuskPlug-macOS.zip
 
       - name: Upload macOS artifact for manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-macos
           path: DuskPlug-macOS.zip
@@ -182,10 +182,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-artifacts
 
@@ -208,6 +208,6 @@ jobs:
           & scripts/generate-latest-json.ps1 @manifestArgs
 
       - name: Upload latest.json to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: latest.json
